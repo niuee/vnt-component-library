@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+      "target": "es6",
+      "module": "es6",
+      "moduleResolution": "node",
+      "sourceMap": true,
+      "outDir": "./dist",
+      "baseUrl": "./src",
+      "declaration": true,
+      "declarationDir": "./dist/types",
+      "experimentalDecorators": true,
+      "allowSyntheticDefaultImports": true,
+      "jsx": "react",
+      "strict": false,
+      "skipLibCheck": true,
+    },
+
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "src/**/*.specs.ts", "submodules", "src/**/*.types.ts", "src/playground"]
+}
+  

@@ -1,0 +1,32 @@
+{
+  "name": "@niuee/vnt-component-library",
+  "version": "0.0.1",
+  "description": "",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "webpack serve --config webpack.config.js",
+    "build": "rollup -c --bundleConfigAsCjs"
+  },
+  "keywords": [],
+  "types": "./dist/types.d.ts",
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.1.0",
+    "@rollup/plugin-terser": "^0.4.3",
+    "@rollup/plugin-typescript": "^11.1.2",
+    "html-webpack-plugin": "^5.5.3",
+    "rollup": "^3.26.2",
+    "rollup-plugin-dts": "^5.3.0",
+    "ts-loader": "^9.4.4",
+    "typescript": "^5.1.6",
+    "webpack": "^5.88.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  },
+  "dependencies": {
+    "point2point": "^0.0.6"
+  }
+}
