@@ -1,5 +1,7 @@
+import { BaseRigidBody, World } from "../../2dphysics";
 import {Test} from "./canvas.specs";
 import { PointCal, point } from "point2point";
+import { VisualRigidBody } from "./VisualRigidBody";
 
 export class TestClass {
     private testField: Test;
@@ -13,15 +15,24 @@ export class TestClass {
     }
 }
 
-export interface CanvasUIComponent {
-    draw(context: CanvasRenderingContext2D): void
+interface DrawStrategy {
+    draw(context: CanvasRenderingContext2D): void;
 }
+
+export interface CanvasUIComponent {
+    draw(context: CanvasRenderingContext2D): void;
+}
+
+export abstract class BaseCanvasUIComponent implements CanvasUIComponent {
+    protected center: {x: number, y: number};
+    abstract draw(context: CanvasRenderingContext2D): void;
+}
+
 
 export class CustomCanvas extends HTMLCanvasElement {
 
     private context: CanvasRenderingContext2D;
     private requestRef: number;
-    // private cameraOffset: {x: number, y: number} = {x: -window.innerWidth / 2, y: -window.innerHeight / 2};
     private cameraOffset: {x: number, y: number} = {x: 0, y: 0};
     private cameraZoom: number = 1;
     private MAX_ZOOM: number = 5;
@@ -33,21 +44,37 @@ export class CustomCanvas extends HTMLCanvasElement {
     private maxTransWidth: number;
     private maxTransHeight: number;
     private uiList: Map<string, CanvasUIComponent>;
-
+    private prevTime: number;
+    private simWorld: World;
+    private rigidBodies: VisualRigidBody[];
 
     constructor(){
         super();
         this.width = window.innerWidth;
         this.height = window.innerHeight;
         this.context = this.getContext("2d");
+        this.style.overflowY = "hidden";
+        this.style.background = "black";
+
         this.context.save();
         this.addEventListener('mousedown', this.onPointerDown);
         this.addEventListener('mouseup', this.onPointerUp);
         this.addEventListener('mousemove', this.onPointerMove);
-        this.addEventListener( 'wheel', (e) => this.scrollHandler(e, e.deltaY*this.SCROLL_SENSITIVITY, 0.1))
+        this.addEventListener( 'wheel', (e) => this.scrollHandler(e, e.deltaY*this.SCROLL_SENSITIVITY, 0.1));
+
+        window.addEventListener('keypress', (e) => {
+            if(e.code == "KeyW") {
+                this.moveForward();
+            } else if(e.code == "KeyS") {
+                this.moveBackward();
+            }
+        });
         this.maxTransHeight = window.innerHeight / 2;
         this.maxTransWidth = window.innerWidth / 2;
         this.uiList = new Map<string, CanvasUIComponent>();
+        this.prevTime = 0;
+        this.simWorld = new World();
+        this.rigidBodies = [];
         this.step = this.step.bind(this);
     }
 
@@ -78,6 +105,10 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     step(timestamp) {
+        let deltaTime = timestamp - this.prevTime;
+        deltaTime /= 1000;
+        this.prevTime = timestamp;
+
         this.width = window.innerWidth;
         this.height = window.innerHeight;
 
@@ -86,13 +117,26 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.context.scale(this.cameraZoom, this.cameraZoom);
         this.context.translate(this.cameraOffset.x,  this.cameraOffset.y);
 
+
+        this.context.beginPath();
+        this.context.strokeStyle = "blue";
+        this.context.lineWidth = 3;
+        this.context.roundRect(-this.maxTransWidth, -this.maxTransHeight, this.maxTransWidth * 2, this.maxTransHeight * 2, 5);
+        this.context.stroke();
+        this.simWorld.step(deltaTime);
         this.uiList.forEach((uiComponent, ident)=>{
             uiComponent.draw(this.context);
+        });
+
+        this.simWorld.getRigidBodyList().forEach((body)=> {
+            let vBody = body as VisualRigidBody;
+            vBody.draw(this.context);
         })
+
         this.requestRef = requestAnimationFrame(this.step);
     }
 
-    drawCircles(context: CanvasRenderingContext2D, centerx: number, centery: number, size: number):void {
+    drawCircles(context: CanvasRenderingContext2D, centerx: number, centery: number, size: number): void {
         context.strokeStyle = "rgb(0, 0, 0)";
         context.moveTo(centerx, centery);
         context.beginPath();
@@ -100,7 +144,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         context.stroke();
     }
 
-    getEventLocation(e: UIEvent):point {
+    getEventLocation(e: UIEvent): point {
         // if (e instanceof TouchEvent && e.touches.length == 1) {
         //     return { x:e.touches[0].clientX, y: e.touches[0].clientY };
         // }
@@ -147,15 +191,17 @@ export class CustomCanvas extends HTMLCanvasElement {
         if (this.isDragging) {
             // console.log("Dragging camera");
             // dragging cmaera
-            this.cameraOffset.x = this.getEventLocation(e).x/this.cameraZoom - this.dragStart.x
-            this.cameraOffset.y = this.getEventLocation(e).y/this.cameraZoom - this.dragStart.y
+            this.cameraOffset.x = this.getEventLocation(e).x/this.cameraZoom - this.dragStart.x;
+            this.cameraOffset.y = this.getEventLocation(e).y/this.cameraZoom - this.dragStart.y;
+
+            this.limitCameraOffset();
         }
     }
 
     scrollHandler(e: WheelEvent, zoomAmount: number, zoomFactor: number) {
         if (e.ctrlKey || (Math.abs(e.deltaY) % 40 == 0 && Math.abs(e.deltaY) !== 0)){
             // console.log("Wheel with control key");
-            // this is pinch zoom event
+            // this is pinch zoom event from trackpad or scroll zoom event from a mouse
             
             let originalWorldPos = this.getAbsPos(this.getEventLocation(e));
             e.preventDefault();
@@ -207,5 +253,49 @@ export class CustomCanvas extends HTMLCanvasElement {
         } 
     }
 
+    private limitCameraOffset(){
+        // clipping camera panning
+        if (this.cameraOffset.x < 0){
+            this.cameraOffset.x = this.maxTransWidth <= -this.cameraOffset.x ? -this.maxTransWidth : this.cameraOffset.x;
+        } else {
+            this.cameraOffset.x = Math.min(this.maxTransWidth, this.cameraOffset.x);
+        }
+        if (this.cameraOffset.y < 0){
+            this.cameraOffset.y = this.maxTransHeight <= -this.cameraOffset.y ? -this.maxTransHeight : this.cameraOffset.y;
+        } else {
+            this.cameraOffset.y = Math.min(this.maxTransHeight, this.cameraOffset.y);
+        }
 
+    }
+
+    addRigidBody(rigidBody: VisualRigidBody): void{
+        let ident = crypto.randomUUID();
+        this.simWorld.addRigidBody(ident, rigidBody);
+    }
+
+    resetCamera(): void{
+        this.cameraOffset = {x: 0, y: 0};
+        this.cameraZoom = 1;
+    }
+
+    moveForward(): void{
+        let bodies = this.simWorld.getRigidBodyList();
+        if (bodies.length === 0) {
+            return
+        }
+        let controlBody = bodies[0];
+        let force: point = {x: 10000, y: 0};
+        controlBody.applyForceInOrientation(force);
+    }
+
+    moveBackward(): void{
+        let bodies = this.simWorld.getRigidBodyList();
+        if (bodies.length === 0) {
+            return
+        }
+        let controlBody = bodies[0];
+        let force: point = {x: -10000, y: 0};
+        controlBody.applyForceInOrientation(force);
+    }
 }
+

@@ -5,9 +5,12 @@
   <meta charset="UTF-8">
   <title>Dev Server</title>
 </head>
-<body style="margin: 0;">
+<body style="margin: 0; overflow: hidden;">
   <!-- Add any necessary HTML markup here -->
-  <!-- <canvas id="test-element" is="custom-canvas" width="100%" height="100%" style="touch-action: pan-x pan-y;"></canvas> -->
-  <type-writer></type-writer>
+  <div style="height: 100%; width: 100%; position: relative;">
+    <canvas id="test-element" is="custom-canvas" width="100%" height="100%"></canvas>
+    <!-- <type-writer></type-writer> -->
+    <button style="position: absolute; top: 0; left: 0" onclick="testOnClick()">Reset Camera</button>
+  </div>
 </body>
 </html>

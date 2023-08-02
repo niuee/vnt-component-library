@@ -29,6 +29,6 @@
     "webpack-dev-server": "^4.15.1"
   },
   "dependencies": {
-    "point2point": "^0.0.6"
+    "point2point": "^0.0.8"
   }
 }
