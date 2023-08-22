@@ -20,12 +20,14 @@ interface DrawStrategy {
 }
 
 export interface CanvasUIComponent {
-    draw(context: CanvasRenderingContext2D): void;
+    draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
+    raycast(cursorPosition: point): boolean;
 }
 
 export abstract class BaseCanvasUIComponent implements CanvasUIComponent {
     protected center: {x: number, y: number};
-    abstract draw(context: CanvasRenderingContext2D): void;
+    abstract draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
+    abstract raycast(cursorPosition: point): boolean;
 }
 
 
@@ -46,7 +48,9 @@ export class CustomCanvas extends HTMLCanvasElement {
     private uiList: Map<string, CanvasUIComponent>;
     private prevTime: number;
     private simWorld: World;
-    private rigidBodies: VisualRigidBody[];
+    private keyController: Map<string, boolean>;
+
+    private tempForce: number = 200;
 
     constructor(){
         super();
@@ -63,18 +67,31 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.addEventListener( 'wheel', (e) => this.scrollHandler(e, e.deltaY*this.SCROLL_SENSITIVITY, 0.1));
 
         window.addEventListener('keypress', (e) => {
-            if(e.code == "KeyW") {
-                this.moveForward();
-            } else if(e.code == "KeyS") {
-                this.moveBackward();
+            if (this.keyController.has(e.code)){
+                this.keyController.set(e.code, true);
             }
         });
-        this.maxTransHeight = window.innerHeight / 2;
-        this.maxTransWidth = window.innerWidth / 2;
+
+        window.addEventListener('keyup', (e)=>{
+            if (this.keyController.has(e.code)){
+                this.keyController.set(e.code, false);
+            }
+        });
+
+        this.maxTransHeight = window.innerHeight;
+        this.maxTransWidth = window.innerWidth;
         this.uiList = new Map<string, CanvasUIComponent>();
         this.prevTime = 0;
         this.simWorld = new World();
-        this.rigidBodies = [];
+        this.keyController = new Map<string, boolean>();
+
+        this.keyController.set("KeyA", false);
+        this.keyController.set("KeyW", false);
+        this.keyController.set("KeyS", false);
+        this.keyController.set("KeyD", false);
+        this.keyController.set("KeyQ", false);
+        this.keyController.set("KeyE", false);
+
         this.step = this.step.bind(this);
     }
 
@@ -104,7 +121,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         console.log("test method");
     }
 
-    step(timestamp) {
+    step(timestamp: number) {
         let deltaTime = timestamp - this.prevTime;
         deltaTime /= 1000;
         this.prevTime = timestamp;
@@ -117,20 +134,45 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.context.scale(this.cameraZoom, this.cameraZoom);
         this.context.translate(this.cameraOffset.x,  this.cameraOffset.y);
 
-
+        // draw outer perimeter of the map
         this.context.beginPath();
         this.context.strokeStyle = "blue";
         this.context.lineWidth = 3;
         this.context.roundRect(-this.maxTransWidth, -this.maxTransHeight, this.maxTransWidth * 2, this.maxTransHeight * 2, 5);
         this.context.stroke();
-        this.simWorld.step(deltaTime);
+
+        if (this.keyController.get("KeyD")) {
+            this.moveRightward();
+        }
+
+        if (this.keyController.get("KeyW")) {
+            this.moveForward();
+        }
+
+        if (this.keyController.get("KeyS")) {
+            this.moveBackward();
+        }
+
+        if (this.keyController.get("KeyA")) {
+            this.moveLeftward();
+        }
+
+        if (this.keyController.get("KeyQ")){
+            this.rotateCCW();
+        }
+        
+        if (this.keyController.get("KeyE")){
+            this.rotateCW();
+        }
+
         this.uiList.forEach((uiComponent, ident)=>{
-            uiComponent.draw(this.context);
+            uiComponent.draw(this.context, this.cameraZoom);
         });
 
+        this.simWorld.step(deltaTime);
         this.simWorld.getRigidBodyList().forEach((body)=> {
             let vBody = body as VisualRigidBody;
-            vBody.draw(this.context);
+            vBody.draw(this.context, this.cameraZoom);
         })
 
         this.requestRef = requestAnimationFrame(this.step);
@@ -171,6 +213,14 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     onPointerDown(e: MouseEvent) {
+
+        this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
+            let vBody = body as VisualRigidBody;
+            if(vBody.raycast(this.getAbsPos(this.getEventLocation(e)))){
+                console.log("clicked in body with ident: ", ident)
+            }
+        })
+
         if (e.button == 0 && e.metaKey) {
             this.isDragging = true;
             this.dragStart = this.getDragOriginPos(e)
@@ -236,8 +286,8 @@ export class CustomCanvas extends HTMLCanvasElement {
             // when the scroll is actually a pan movement
             e.preventDefault();
             // console.log("This is the world coordinate when panning:", this.getAbsPos(this.getEventLocation(e)));
-            this.cameraOffset.x -= e.deltaX / this.cameraZoom;
-            this.cameraOffset.y -= e.deltaY / this.cameraZoom;
+            this.cameraOffset.x -= 0.3 * (e.deltaX / this.cameraZoom);
+            this.cameraOffset.y -= 0.3 * (e.deltaY / this.cameraZoom);
 
             // clipping camera panning
             if (this.cameraOffset.x < 0){
@@ -270,6 +320,7 @@ export class CustomCanvas extends HTMLCanvasElement {
 
     addRigidBody(rigidBody: VisualRigidBody): void{
         let ident = crypto.randomUUID();
+        console.log("Adding body with ident: ", ident);
         this.simWorld.addRigidBody(ident, rigidBody);
     }
 
@@ -284,7 +335,7 @@ export class CustomCanvas extends HTMLCanvasElement {
             return
         }
         let controlBody = bodies[0];
-        let force: point = {x: 10000, y: 0};
+        let force: point = {x: this.tempForce, y: 0};
         controlBody.applyForceInOrientation(force);
     }
 
@@ -294,8 +345,46 @@ export class CustomCanvas extends HTMLCanvasElement {
             return
         }
         let controlBody = bodies[0];
-        let force: point = {x: -10000, y: 0};
+        let force: point = {x: -this.tempForce, y: 0};
         controlBody.applyForceInOrientation(force);
+    }
+
+    moveLeftward(): void{
+        let bodies = this.simWorld.getRigidBodyList();
+        if (bodies.length === 0) {
+            return
+        }
+        let controlBody = bodies[0];
+        let force: point = {y: this.tempForce, x: 0};
+        controlBody.applyForceInOrientation(force);
+    }
+
+    moveRightward(): void{
+        let bodies = this.simWorld.getRigidBodyList();
+        if (bodies.length === 0) {
+            return
+        }
+        let controlBody = bodies[0];
+        let force: point = {y: -this.tempForce, x: 0};
+        controlBody.applyForceInOrientation(force);
+    }
+
+    rotateCCW(): void{
+        let bodies = this.simWorld.getRigidBodyList();
+        if (bodies.length === 0) {
+            return
+        }
+        let controlBody = bodies[0];
+        controlBody.setAngularVelocity(0.087);
+    }
+
+    rotateCW(): void{
+        let bodies = this.simWorld.getRigidBodyList();
+        if (bodies.length === 0) {
+            return
+        }
+        let controlBody = bodies[0];
+        controlBody.setAngularVelocity(-0.087);
     }
 }
 

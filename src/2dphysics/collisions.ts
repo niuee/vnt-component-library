@@ -31,7 +31,6 @@ export class Collision {
             return;
         }
         combinationsToCheck.forEach(combination => {
-            console.log("resolving");
             let bodyA = bodies[combination.bodyAIndex];
             let bodyB = bodies[combination.bodyBIndex];
             let {collision, depth, normal: normalAxis} = this.intersects(bodyA, bodyB);
@@ -46,12 +45,12 @@ export class Collision {
                     bodyB.move(revMoveDisplacement);
                 }
                 if (bodyA.isStatic()) {
-                    bodyA.move(revMoveDisplacement);
+                    // bodyA.move(revMoveDisplacement);
                     bodyB.move(revMoveDisplacement);
                 }
                 if (bodyB.isStatic()) {
                     bodyA.move(moveDisplacement);
-                    bodyB.move(moveDisplacement);
+                    // bodyB.move(moveDisplacement);
                 }
 
                 if (resolveCollision) {
@@ -109,7 +108,7 @@ export class Collision {
         if (bodyA.isStatic() && bodyB.isStatic()) {
             return;
         }
-        let restitution = 0.4;
+        let restitution = 0.15;
 
         let inverseMassA = bodyA.isStatic() || bodyA.isMovingStatic() ? 0 : 1 / bodyA.getMass();
         let inverseMassB = bodyB.isStatic() || bodyB.isMovingStatic() ? 0 : 1 / bodyB.getMass();

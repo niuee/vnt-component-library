@@ -44,4 +44,8 @@ export class World {
         })
         return rigidBodyList;
     }
+
+    getRigidBodyMap(): Map<string, BaseRigidBody>{
+        return this.rigidBodyMap;
+    }
 }
