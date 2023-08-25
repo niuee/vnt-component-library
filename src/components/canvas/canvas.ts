@@ -2,6 +2,7 @@ import { BaseRigidBody, World } from "../../2dphysics";
 import {Test} from "./canvas.specs";
 import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "./VisualRigidBody";
+import {workerScript} from "../../workerscripts/phyworker";
 
 export class TestClass {
     private testField: Test;
@@ -48,23 +49,39 @@ export class CustomCanvas extends HTMLCanvasElement {
     private uiList: Map<string, CanvasUIComponent>;
     private prevTime: number;
     private simWorld: World;
+    private setIntervalID: NodeJS.Timer;
+    private lastTimeUpdate: number;
     private keyController: Map<string, boolean>;
+    private tempForce: number = 300;
 
-    private tempForce: number = 200;
+    private worker: Worker;
 
     constructor(){
         super();
+        this.tabSwitchingHandler = this.tabSwitchingHandler.bind(this);
         this.width = window.innerWidth;
         this.height = window.innerHeight;
         this.context = this.getContext("2d");
         this.style.overflowY = "hidden";
         this.style.background = "black";
+        this.lastTimeUpdate = Date.now();
 
         this.context.save();
         this.addEventListener('mousedown', this.onPointerDown);
         this.addEventListener('mouseup', this.onPointerUp);
         this.addEventListener('mousemove', this.onPointerMove);
         this.addEventListener( 'wheel', (e) => this.scrollHandler(e, e.deltaY*this.SCROLL_SENSITIVITY, 0.1));
+
+        this.worker = new Worker(workerScript);
+        this.worker.onmessage = (data)=>{
+            let nowTime = Date.now();
+            let deltaTime = nowTime - this.lastTimeUpdate;
+            this.lastTimeUpdate = nowTime; 
+            this.simWorld.step(deltaTime / 1000);
+            console.log("received message from web worker");
+        }
+
+        document.addEventListener("visibilitychange", this.tabSwitchingHandler);
 
         window.addEventListener('keypress', (e) => {
             if (this.keyController.has(e.code)){
@@ -122,9 +139,12 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     step(timestamp: number) {
+        // console.log("Stepping in step tab step function");
         let deltaTime = timestamp - this.prevTime;
+        deltaTime = Math.min(Date.now() - this.lastTimeUpdate, deltaTime);
         deltaTime /= 1000;
         this.prevTime = timestamp;
+
 
         this.width = window.innerWidth;
         this.height = window.innerHeight;
@@ -169,8 +189,9 @@ export class CustomCanvas extends HTMLCanvasElement {
             uiComponent.draw(this.context, this.cameraZoom);
         });
 
+        // step and draw elements
         this.simWorld.step(deltaTime);
-        this.simWorld.getRigidBodyList().forEach((body)=> {
+        this.simWorld.getRigidBodyList().forEach((body, index)=> {
             let vBody = body as VisualRigidBody;
             vBody.draw(this.context, this.cameraZoom);
         })
@@ -210,6 +231,8 @@ export class CustomCanvas extends HTMLCanvasElement {
             this.lastZoom = this.cameraZoom;
             let convertCoord = this.getEventLocation(e);
         }
+        let element = e.target as HTMLCanvasElement;
+        element.style.cursor = "auto";
     }
 
     onPointerDown(e: MouseEvent) {
@@ -241,6 +264,8 @@ export class CustomCanvas extends HTMLCanvasElement {
         if (this.isDragging) {
             // console.log("Dragging camera");
             // dragging cmaera
+            let canvas = e.target as HTMLCanvasElement;
+            canvas.style.cursor = "grabbing";
             this.cameraOffset.x = this.getEventLocation(e).x/this.cameraZoom - this.dragStart.x;
             this.cameraOffset.y = this.getEventLocation(e).y/this.cameraZoom - this.dragStart.y;
 
@@ -249,10 +274,10 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     scrollHandler(e: WheelEvent, zoomAmount: number, zoomFactor: number) {
-        if (e.ctrlKey || (Math.abs(e.deltaY) % 40 == 0 && Math.abs(e.deltaY) !== 0)){
+        if (e.ctrlKey || (Math.abs(e.deltaY) % 40 == 0 && Math.abs(e.deltaY) !== 0) || !Number.isInteger(e.deltaY)){
             // console.log("Wheel with control key");
             // this is pinch zoom event from trackpad or scroll zoom event from a mouse
-            
+            // console.log("scrolling for zoom");
             let originalWorldPos = this.getAbsPos(this.getEventLocation(e));
             e.preventDefault();
             if (!this.isDragging) {
@@ -275,6 +300,15 @@ export class CustomCanvas extends HTMLCanvasElement {
                 }
                 // console.log(this.getEventLocation(e));
             }
+
+            // this is the experimental calculations of drawing only stuff that lies in the viewport
+            // console.log("Camera Zoom: ", this.cameraZoom);
+            // console.log("Center is ", this.cameraOffset);
+            // console.log("left most:", -this.cameraOffset.x - ((this.width / 2) / this.cameraZoom));
+            // console.log("right most:", -this.cameraOffset.x + ((this.width / 2) / this.cameraZoom));
+            // console.log("up most:", this.cameraOffset.y - ((this.height / 2) / this.cameraZoom));
+            // console.log("down most:", this.cameraOffset.y + ((this.height / 2) / this.cameraZoom));
+            
             return;
         } 
         // console.log("wheelDeltaY:", e.wheelDeltaY, "deltaY:", e.deltaY); 
@@ -325,7 +359,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     resetCamera(): void{
-        this.cameraOffset = {x: 0, y: 0};
+        this.cameraOffset = {x: 300, y: 300};
         this.cameraZoom = 1;
     }
 
@@ -385,6 +419,20 @@ export class CustomCanvas extends HTMLCanvasElement {
         }
         let controlBody = bodies[0];
         controlBody.setAngularVelocity(-0.087);
+    }
+
+   
+    
+
+    tabSwitchingHandler(){
+        if (document.hidden){
+            console.log("Browser tab is hidden");
+            this.lastTimeUpdate = Date.now();
+            this.worker.postMessage({turn: "on"});
+        } else {
+            console.log("Browser tab is visible");
+            this.worker.postMessage({turn: "off"});
+        }
     }
 }
 

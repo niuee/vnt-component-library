@@ -35,6 +35,7 @@ export class Collision {
             let bodyB = bodies[combination.bodyBIndex];
             let {collision, depth, normal: normalAxis} = this.intersects(bodyA, bodyB);
             if (collision) {
+                // console.log("collision");
                 let moveDisplacement = PointCal.multiplyVectorByScalar(normalAxis, depth / 2);
                 let revMoveDisplacement = PointCal.multiplyVectorByScalar(normalAxis, -depth / 2);
 
@@ -108,20 +109,26 @@ export class Collision {
         if (bodyA.isStatic() && bodyB.isStatic()) {
             return;
         }
-        let restitution = 0.15;
+        let restitution = 0.4;
 
         let inverseMassA = bodyA.isStatic() || bodyA.isMovingStatic() ? 0 : 1 / bodyA.getMass();
         let inverseMassB = bodyB.isStatic() || bodyB.isMovingStatic() ? 0 : 1 / bodyB.getMass();
         // console.log("inverse mass a", inverseMassA);
         // console.log("inverse mass b", inverseMassB);
+
         let relativeVelocity = PointCal.subVector(bodyA.getLinearVelocity(), bodyB.getLinearVelocity());
+        // console.log("relative velocity: ", relativeVelocity);
+        // console.log("linear velocity of a", bodyA.getLinearVelocity());
+        // console.log("linear veolcity of b", bodyB.getLinearVelocity());
         let J = -(1 + restitution) * PointCal.dotProduct(relativeVelocity, normal);
         J /= inverseMassA + inverseMassB;
 
         let deltaVelocityA = PointCal.multiplyVectorByScalar(normal, J * inverseMassA);
         let deltaVelocityB = PointCal.multiplyVectorByScalar(normal, J * inverseMassB);
+        // console.log("delta velocity A:", deltaVelocityA);
+        // console.log("delta velocity B:", deltaVelocityB);
 
         bodyA.setLinearVelocity(PointCal.addVector(bodyA.getLinearVelocity(), deltaVelocityA));
-        bodyB.setLinearVelocity(PointCal.addVector(bodyB.getLinearVelocity(), deltaVelocityB));
+        bodyB.setLinearVelocity(PointCal.subVector(bodyB.getLinearVelocity(), deltaVelocityB));
     }
 }

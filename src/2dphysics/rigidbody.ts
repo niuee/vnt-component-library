@@ -49,6 +49,9 @@ export abstract class BaseRigidBody implements RigidBody{
         this.orientationAngle += angle;
     }
 
+    getCenter(): point {
+        return this.center;
+    }
     
     getOrientationAngle(): number{
         return this.orientationAngle;
@@ -105,22 +108,6 @@ export abstract class BaseRigidBody implements RigidBody{
     }
 
     step(deltaTime: number): void {
-        // update orientation angle
-        this.orientationAngle += this.angularVelocity * deltaTime;
-        // console.log("Angular Velocity:", this.angularVelocity);
-        // damping the angular velocity
-        let originalAngularVelocity = this.angularVelocity;
-        if (this.angularVelocity > 0){
-            this.angularVelocity -= 0.05 * deltaTime;
-        } else if (this.angularVelocity < 0){
-            this.angularVelocity += 0.05 * deltaTime;
-        }
-
-        if (this.angularVelocity * originalAngularVelocity < 0) {
-            // console.log("Clamped");
-            this.angularVelocity = 0;
-        }
-
         if (this.frictionEnabled) {
             if (this.isStatic()  || 
                 (this.linearVelocity.x == 0 && 

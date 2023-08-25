@@ -3,6 +3,7 @@ import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "../VisualRigidBody";
 
 
+
 export class VisualPolygon extends VisualRigidBody{
 
     constructor(center: point, vertices: point[], orientationAngle: number = 0, mass: number = 50, isStatic: boolean = false, frictionEnabled: boolean = true) {
@@ -13,6 +14,18 @@ export class VisualPolygon extends VisualRigidBody{
     draw(context: CanvasRenderingContext2D): void {
         let body = this._rigidBody as Polygon;
         let points = body.getVerticesAbsCoord();
+        let center = body.getCenter();
+        let orientationAngle = body.getOrientationAngle();
+
+        let endPoint = PointCal.addVector(center, PointCal.rotatePoint({x: 10, y: 0}, orientationAngle));
+        context.beginPath();
+        context.moveTo(center.x, -center.y);
+        context.lineTo(endPoint.x, -endPoint.y);
+        context.stroke();
+
+        context.beginPath();
+        context.arc(center.x, -center.y, 1, 0, 2 * Math.PI);
+        context.stroke();
         context.lineWidth = 1;
         context.beginPath();
         context.lineJoin = "round";

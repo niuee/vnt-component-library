@@ -26,6 +26,7 @@ export class World {
 
 
     step(deltaTime: number): void{
+        // console.log("stepping in world");
         let rigidBodyList: BaseRigidBody[] = [];
         this.rigidBodyMap.forEach((body) => {
             rigidBodyList.push(body);
