@@ -120,13 +120,15 @@ export abstract class BaseRigidBody implements RigidBody{
             }
             let kineticFrictionDirection = PointCal.multiplyVectorByScalar(PointCal.unitVector(this.linearVelocity), -1);
             let kineticFriction = PointCal.multiplyVectorByScalar(kineticFrictionDirection, this.dynamicFrictionCoeff * this.mass * 9.81);
-            if (PointCal.magnitude(PointCal.subVector(this.linearVelocity, {x: 0, y: 0})) <= 0.05) {
-                this.linearVelocity = {x: 0, y: 0};
-            }
             this.force = PointCal.addVector(this.force, kineticFriction);
         }
-        
+        if (PointCal.magnitude(this.linearVelocity) < PointCal.magnitude(PointCal.divideVectorByScalar(PointCal.multiplyVectorByScalar(this.force, deltaTime), this.mass))){
+            this.linearVelocity = {x: 0, y: 0};
+        }
         this.linearVelocity = PointCal.addVector(this.linearVelocity, PointCal.divideVectorByScalar(PointCal.multiplyVectorByScalar(this.force, deltaTime), this.mass));
+        // if (PointCal.magnitude(PointCal.subVector(this.linearVelocity, {x: 0, y: 0})) <= 0.05) {
+        //     this.linearVelocity = {x: 0, y: 0};
+        // }
         this.center = PointCal.addVector(this.center, PointCal.multiplyVectorByScalar(this.linearVelocity, deltaTime));
         this.force = {x: 0, y: 0};
     }

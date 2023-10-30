@@ -1,22 +1,11 @@
-import { BaseRigidBody, World } from "../../2dphysics";
-import {Test} from "./canvas.specs";
+import { World } from "../../2dphysics";
 import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "./VisualRigidBody";
 import {workerScript} from "../../workerscripts/phyworker";
+import {Bezier} from "bezier-js";
+import { BCurve } from "../../bezierCurve";
 
-export class TestClass {
-    private testField: Test;
-
-    constructor(){
-        this.testField = {numberField: 10, stringField: "test"}
-    }
-
-    testMethod(){
-        console.log("test method: ", this.testField.numberField);
-    }
-}
-
-interface DrawStrategy {
+export interface NonInteractiveUIComponent {
     draw(context: CanvasRenderingContext2D): void;
 }
 
@@ -39,17 +28,17 @@ export class CustomCanvas extends HTMLCanvasElement {
     private cameraOffset: {x: number, y: number} = {x: 0, y: 0};
     private cameraZoom: number = 1;
     private MAX_ZOOM: number = 5;
-    private MIN_ZOOM: number = 0.1;
-    private SCROLL_SENSITIVITY: number = 0.0005;
+    private MIN_ZOOM: number = 0.01;
+    private SCROLL_SENSITIVITY: number = 0.001;
     private isDragging: boolean = false;
     private dragStart: {x: number, y: number} = {x: 0, y: 0};
     private lastZoom = this.cameraZoom;
     private maxTransWidth: number;
     private maxTransHeight: number;
     private uiList: Map<string, CanvasUIComponent>;
+    private nonInteractiveUILists: NonInteractiveUIComponent[];
     private prevTime: number;
     private simWorld: World;
-    private setIntervalID: NodeJS.Timer;
     private lastTimeUpdate: number;
     private keyController: Map<string, boolean>;
     private tempForce: number = 300;
@@ -63,7 +52,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.height = window.innerHeight;
         this.context = this.getContext("2d");
         this.style.overflowY = "hidden";
-        this.style.background = "black";
+        this.style.background = "white";
         this.lastTimeUpdate = Date.now();
 
         this.context.save();
@@ -95,9 +84,10 @@ export class CustomCanvas extends HTMLCanvasElement {
             }
         });
 
-        this.maxTransHeight = window.innerHeight;
-        this.maxTransWidth = window.innerWidth;
+        this.maxTransHeight = 50000;
+        this.maxTransWidth = 50000;
         this.uiList = new Map<string, CanvasUIComponent>();
+        this.nonInteractiveUILists = [];
         this.prevTime = 0;
         this.simWorld = new World();
         this.keyController = new Map<string, boolean>();
@@ -113,11 +103,21 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     connectedCallback(){
+        let controlPoints = [{x: 90, y: 200}, {x: 25, y: 100}, {x: 220, y:40}];
+        let controlPoints2 = [{x: 30, y: 100}, {x: 25, y: 100}, {x: 220, y:40}];
+        let bezierCurve = new Bezier(controlPoints[0], controlPoints[1], controlPoints[2]);
+        let bCurve = new BCurve(controlPoints);
+        console.log(bezierCurve.length());
+        console.log(bCurve.calLength());
         this.requestRef = requestAnimationFrame(this.step);
     }
 
     disconnectedCallback(){
         cancelAnimationFrame(this.requestRef);
+    }
+
+    insertNIUIComponent(niUIComp: NonInteractiveUIComponent){
+        this.nonInteractiveUILists.push(niUIComp);
     }
 
     insertUIComponent(uiComponent: CanvasUIComponent) {
@@ -149,7 +149,6 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.width = window.innerWidth;
         this.height = window.innerHeight;
 
-        this.context.restore();
         this.context.translate( window.innerWidth / 2, window.innerHeight / 2 );
         this.context.scale(this.cameraZoom, this.cameraZoom);
         this.context.translate(this.cameraOffset.x,  this.cameraOffset.y);
@@ -157,9 +156,10 @@ export class CustomCanvas extends HTMLCanvasElement {
         // draw outer perimeter of the map
         this.context.beginPath();
         this.context.strokeStyle = "blue";
-        this.context.lineWidth = 3;
+        this.context.lineWidth = 300;
         this.context.roundRect(-this.maxTransWidth, -this.maxTransHeight, this.maxTransWidth * 2, this.maxTransHeight * 2, 5);
         this.context.stroke();
+        this.context.lineWidth = 3;
 
         if (this.keyController.get("KeyD")) {
             this.moveRightward();
@@ -189,10 +189,17 @@ export class CustomCanvas extends HTMLCanvasElement {
             uiComponent.draw(this.context, this.cameraZoom);
         });
 
+        this.nonInteractiveUILists.forEach((nuiComp)=>{
+            nuiComp.draw(this.context);
+        });
+
         // step and draw elements
         this.simWorld.step(deltaTime);
         this.simWorld.getRigidBodyList().forEach((body, index)=> {
             let vBody = body as VisualRigidBody;
+            if(PointCal.distanceBetweenPoints(vBody.getLinearVelocity(), {x: 0, y: 0}) != 0){
+                console.log("test");
+            }
             vBody.draw(this.context, this.cameraZoom);
         })
 
@@ -236,7 +243,8 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     onPointerDown(e: MouseEvent) {
-
+        console.log("mouse pos in view", this.getEventLocation(e));
+        console.log("mouse pos in world coord", this.getAbsPos(this.getEventLocation(e)));
         this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
             let vBody = body as VisualRigidBody;
             if(vBody.raycast(this.getAbsPos(this.getEventLocation(e)))){
@@ -265,7 +273,7 @@ export class CustomCanvas extends HTMLCanvasElement {
             // console.log("Dragging camera");
             // dragging cmaera
             let canvas = e.target as HTMLCanvasElement;
-            canvas.style.cursor = "grabbing";
+            canvas.style.cursor = "move";
             this.cameraOffset.x = this.getEventLocation(e).x/this.cameraZoom - this.dragStart.x;
             this.cameraOffset.y = this.getEventLocation(e).y/this.cameraZoom - this.dragStart.y;
 
@@ -274,15 +282,23 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     scrollHandler(e: WheelEvent, zoomAmount: number, zoomFactor: number) {
-        if (e.ctrlKey || (Math.abs(e.deltaY) % 40 == 0 && Math.abs(e.deltaY) !== 0) || !Number.isInteger(e.deltaY)){
+
+        e.preventDefault();
+        console.log("deltaY: ", e.deltaY);
+        // console.log("result:", Math.abs(e.deltaY) % 8 == 0 && Math.abs(e.deltaY) !== 0 );
+        
+        if (e.shiftKey){
+            return;
+        }
+
+        if (e.ctrlKey || e.metaKey){
             // console.log("Wheel with control key");
             // this is pinch zoom event from trackpad or scroll zoom event from a mouse
             // console.log("scrolling for zoom");
             let originalWorldPos = this.getAbsPos(this.getEventLocation(e));
-            e.preventDefault();
             if (!this.isDragging) {
                 if (zoomAmount) {
-                    this.cameraZoom -= zoomAmount* 5;
+                    this.cameraZoom -= zoomAmount * 5;
                 } else if (zoomFactor) {
                     // console.log(zoomFactor)
                     this.cameraZoom = zoomFactor * this.lastZoom
@@ -301,7 +317,8 @@ export class CustomCanvas extends HTMLCanvasElement {
                 // console.log(this.getEventLocation(e));
             }
 
-            // this is the experimental calculations of drawing only stuff that lies in the viewport
+            // this is the experimental calculations of drawing only stuff that lies within the viewport
+            // below are screen boundaries
             // console.log("Camera Zoom: ", this.cameraZoom);
             // console.log("Center is ", this.cameraOffset);
             // console.log("left most:", -this.cameraOffset.x - ((this.width / 2) / this.cameraZoom));
@@ -316,12 +333,12 @@ export class CustomCanvas extends HTMLCanvasElement {
         // your code
         // console.log("From" + isTouchPad? "touchpad" : "mouse");
         // console.log("absolute: ", Math.abs(e.deltaY));
-        else { //(Math.abs(e.deltaY) % 40 !== 0 || Math.abs(e.deltaY) == 0) {
+        else{ //(Math.abs(e.deltaY) % 40 !== 0 || Math.abs(e.deltaY) == 0) {
             // when the scroll is actually a pan movement
             e.preventDefault();
             // console.log("This is the world coordinate when panning:", this.getAbsPos(this.getEventLocation(e)));
-            this.cameraOffset.x -= 0.3 * (e.deltaX / this.cameraZoom);
-            this.cameraOffset.y -= 0.3 * (e.deltaY / this.cameraZoom);
+            this.cameraOffset.x -= 0.5 * (e.deltaX / this.cameraZoom);
+            this.cameraOffset.y -= 0.5 * (e.deltaY / this.cameraZoom);
 
             // clipping camera panning
             if (this.cameraOffset.x < 0){
@@ -359,8 +376,12 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     resetCamera(): void{
-        this.cameraOffset = {x: 300, y: 300};
+        this.cameraOffset = {x: 0, y: 0};
         this.cameraZoom = 1;
+    }
+
+    setCameraPos(point: point): void{
+        this.cameraOffset = {x: -point.x, y: point.y};
     }
 
     moveForward(): void{

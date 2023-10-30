@@ -32,6 +32,6 @@ module.exports = {
     }),
   ],
   devServer: {
-    static: path.resolve(__dirname, 'dist'), // Specify the directory for serving static files
+    static: path.resolve(__dirname, 'devDist'), // Specify the directory for serving static files
   },
 };

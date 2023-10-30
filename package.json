@@ -29,6 +29,8 @@
     "webpack-dev-server": "^4.15.1"
   },
   "dependencies": {
-    "point2point": "^0.0.8"
+    "@types/bezier-js": "^4.1.1",
+    "bezier-js": "^6.1.4",
+    "point2point": "^0.0.92"
   }
 }

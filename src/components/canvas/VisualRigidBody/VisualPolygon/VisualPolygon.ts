@@ -26,7 +26,7 @@ export class VisualPolygon extends VisualRigidBody{
         context.beginPath();
         context.arc(center.x, -center.y, 1, 0, 2 * Math.PI);
         context.stroke();
-        context.lineWidth = 1;
+        context.lineWidth = 0.3;
         context.beginPath();
         context.lineJoin = "round";
 
