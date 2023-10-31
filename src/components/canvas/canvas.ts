@@ -25,7 +25,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     private requestRef: number;
     private cameraOffset: {x: number, y: number} = {x: 0, y: 0};
     private cameraZoom: number = 1;
-    private cameraAngle: number = 45 * Math.PI / 180;
+    private cameraAngle: number = 73 * Math.PI / 180;
     private MAX_ZOOM: number = 5;
     private MIN_ZOOM: number = 0.01;
     private SCROLL_SENSITIVITY: number = 0.001;
@@ -300,7 +300,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     scrollHandler(e: WheelEvent, zoomAmount: number, zoomFactor: number) {
 
         e.preventDefault();
-        console.log("deltaY: ", e.deltaY);
+        // console.log("deltaY: ", e.deltaY);
         // console.log("result:", Math.abs(e.deltaY) % 8 == 0 && Math.abs(e.deltaY) !== 0 );
         
         if (e.shiftKey){
@@ -317,20 +317,21 @@ export class CustomCanvas extends HTMLCanvasElement {
                     this.cameraZoom -= zoomAmount * 5;
                 } else if (zoomFactor) {
                     // console.log(zoomFactor)
-                    this.cameraZoom = zoomFactor * this.lastZoom
+                    this.cameraZoom = zoomFactor * this.lastZoom;
                 }
                 
-                this.cameraZoom = Math.min( this.cameraZoom, this.MAX_ZOOM )
-                this.cameraZoom = Math.max( this.cameraZoom, this.MIN_ZOOM )
+                this.cameraZoom = Math.min( this.cameraZoom, this.MAX_ZOOM );
+                this.cameraZoom = Math.max( this.cameraZoom, this.MIN_ZOOM );
                 // console.log("Diff in World Coordinate after zooming: ", PointCal.subVector(originalWorldPos, this.getWorldPos(this.getEventLocation(e))));
                 let posDiff = PointCal.subVector(originalWorldPos, this.getWorldPos(this.getEventLocation(e)));
+                
+                posDiff = PointCal.rotatePoint(posDiff, this.cameraAngle);
                 if (originalWorldPos.x >= 0 && originalWorldPos.x <= this.maxTransWidth || originalWorldPos.x < 0 && originalWorldPos.x >= -this.maxTransWidth) {
                     this.cameraOffset.x -= posDiff.x;
                 }
                 if (originalWorldPos.y >= 0 && originalWorldPos.y <= this.maxTransHeight || originalWorldPos.y < 0 && originalWorldPos.y >= -this.maxTransHeight) {
                     this.cameraOffset.y -= posDiff.y;
                 }
-                // console.log(this.getEventLocation(e));
             }
 
             // this is the experimental calculations of drawing only stuff that lies within the viewport
@@ -384,6 +385,14 @@ export class CustomCanvas extends HTMLCanvasElement {
 
     }
 
+    convertCoordinateToWorldSpace(point: point){
+        return {x: point.x, y: -point.y};
+    }
+
+    alignCameraWithObjOrientation(angle: number){
+        this.cameraAngle = angle - (90 * Math.PI / 180);
+    }
+
     addRigidBody(rigidBody: VisualRigidBody): void{
         let ident = crypto.randomUUID();
         console.log("Adding body with ident: ", ident);
@@ -393,6 +402,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     resetCamera(): void{
         this.cameraOffset = {x: 0, y: 0};
         this.cameraZoom = 1;
+        this.cameraAngle = 0;
     }
 
     setCameraPos(point: point): void{
