@@ -25,7 +25,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     private requestRef: number;
     private cameraOffset: {x: number, y: number} = {x: 0, y: 0};
     private cameraZoom: number = 1;
-    private cameraAngle: number = 73 * Math.PI / 180;
+    private cameraAngle: number = 45 * Math.PI / 180;
     private MAX_ZOOM: number = 5;
     private MIN_ZOOM: number = 0.01;
     private SCROLL_SENSITIVITY: number = 0.001;
@@ -123,10 +123,6 @@ export class CustomCanvas extends HTMLCanvasElement {
         }
     }
 
-    resetCameraOffset(){
-        this.cameraOffset = {x: 0, y: 0};
-    }
-
     testMethod() {
         console.log("test method");
     }
@@ -142,6 +138,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.width = window.innerWidth;
         this.height = window.innerHeight;
 
+        this.context.restore();
         this.context.translate( window.innerWidth / 2, window.innerHeight / 2 );
         this.context.scale(this.cameraZoom, this.cameraZoom);
         this.context.translate(this.cameraOffset.x,  this.cameraOffset.y);
@@ -264,7 +261,9 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
             let vBody = body as VisualRigidBody;
             if(vBody.raycast(convertedCoord)){
-                console.log("clicked in body with ident: ", ident)
+                console.log("clicked in body with ident: ", ident);
+                this.alignCameraWithObjOrientation(vBody.getOrientationAngle());
+                this.focusCameraOnObj(vBody);
             }
         })
 
@@ -385,7 +384,7 @@ export class CustomCanvas extends HTMLCanvasElement {
 
     }
 
-    convertCoordinateToWorldSpace(point: point){
+    convertCoord(point: point){
         return {x: point.x, y: -point.y};
     }
 
@@ -405,8 +404,17 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.cameraAngle = 0;
     }
 
+    focusCameraOnObj(body: VisualRigidBody){
+        let windowFrameCoord = this.convertCoord(body.getCenter());
+        console.log("body center in window frame", windowFrameCoord);
+
+        this.setCameraPos(PointCal.rotatePoint(windowFrameCoord, this.cameraAngle));
+    }
+
+
     setCameraPos(point: point): void{
-        this.cameraOffset = {x: -point.x, y: point.y};
+        console.log("setting camera center to", point);
+        this.cameraOffset = {x: -point.x, y: -point.y};
     }
 
     moveForward(): void{
