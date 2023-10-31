@@ -27,6 +27,10 @@ export abstract class VisualRigidBody extends BaseRigidBody implements UICompone
     applyForceInOrientation(force: number | point): void {
         this._rigidBody.applyForceInOrientation(force);
     }
+    
+    getCenter(): point {
+        return this._rigidBody.getCenter();
+    }
 
     getAABB(): { min: point; max: point; } {
         return this._rigidBody.getAABB();
