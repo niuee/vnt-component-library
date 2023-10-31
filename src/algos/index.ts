@@ -1,2 +1,2 @@
 export * from "./findClosestPoints";
-export * from "./lineIntersection";
+export * from "./LineOperation";

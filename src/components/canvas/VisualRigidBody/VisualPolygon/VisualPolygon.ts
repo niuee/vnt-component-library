@@ -49,7 +49,6 @@ export class VisualPolygon extends VisualRigidBody{
     }
 
     raycast(cursorPosition: point): boolean {
-        cursorPosition.y = -cursorPosition.y;
         let body = this._rigidBody as Polygon;
         
         let points = body.getVerticesAbsCoord();

@@ -1,8 +1,9 @@
 // dev-server.ts
 import { CustomCanvas, NonInteractiveUIComponent} from '../components';
 import { VisualPolygon } from '../components/canvas/VisualRigidBody';
-import { getLineIntersection } from "../algos";
+import { getLineIntersection, projectPointOntoLine } from "../algos";
 import { point } from 'point2point';
+import { Track } from '../track';
 
 
 class NICircle implements NonInteractiveUIComponent {
@@ -10,6 +11,10 @@ class NICircle implements NonInteractiveUIComponent {
 
     constructor(center: point){
         this.center = center;
+    }
+
+    getCenter(): point{
+        return this.center;
     }
 
     draw(context: CanvasRenderingContext2D): void {
@@ -58,23 +63,17 @@ class NILine implements NonInteractiveUIComponent {
 
 customElements.define('custom-canvas', CustomCanvas, {extends: "canvas"});
 
-const testLine = new NILine({x: 0, y: 100}, {x: 100, y: 200});
-const testLine2 = new NILine({x: 0, y: 200}, {x: 100, y: 100});
-const intersectRes = getLineIntersection(testLine.getStartPoint(), testLine.getEndPoint(), testLine2.getStartPoint(), testLine2.getEndPoint());
 let element = document.querySelector("#test-element") as CustomCanvas;
-if (intersectRes.intersects){
-    const intersectionPoint = new NICircle(intersectRes.intersection);
-    element.insertNIUIComponent(intersectionPoint);
-}
-let button = document.querySelector("button");
+
+let testTrack = new Track({x: 0, y: 0}, {x: 100, y: 200}, {x: 300, y: 400}, {x: 500, y: 600});
+element.insertUIComponent(testTrack);
+
 let testPolygon = new VisualPolygon({x: 300, y: 300}, [{x: 10, y: 10}, {x: 10, y: -10}, {x: -10, y: -10}, {x: -10, y: 10}], 0, 50, false, true);
-let testStaticPolygon = new VisualPolygon({x: 50, y: 0}, [{x: 5, y: 5}, {x: 5, y: -5}, {x: -5, y: -5}, {x: -5, y: 5}], 0, 50, false, true);
+let testStaticPolygon = new VisualPolygon({x: 50, y: 0}, [{x: 5, y: 5}, {x: 5, y: -5}, {x: -5, y: -5}, {x: -5, y: 5}], 45 *  Math.PI / 180, 50, false, true);
 element.addRigidBody(testPolygon);
 element.addRigidBody(testStaticPolygon);
-element.insertNIUIComponent(testLine);
-element.insertNIUIComponent(testLine2);
 
-
+let button = document.querySelector("button");
 if (button) {
     button.onclick = () => element.resetCamera();
 }

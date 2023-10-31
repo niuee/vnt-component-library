@@ -1,8 +1,8 @@
 import { point } from "point2point";
 import { BaseRigidBody } from "../../../2dphysics";
-import { CanvasUIComponent } from "../canvas";
+import { UIComponent } from "../canvas";
 
-export abstract class VisualRigidBody extends BaseRigidBody implements CanvasUIComponent {
+export abstract class VisualRigidBody extends BaseRigidBody implements UIComponent {
     protected _rigidBody: BaseRigidBody;
 
     abstract draw(context: CanvasRenderingContext2D, cameraZoom: number): void;

@@ -1,16 +1,15 @@
 import { point } from "point2point";
-import { BaseCanvasUIComponent } from "../canvas";
+import { UIComponent } from "../canvas";
 
 
 
-export class StationComponent extends BaseCanvasUIComponent {
+export class StationComponent implements UIComponent {
 
     private stationName: string;
     private stationID: string;
     private line: string;
     
     constructor(){
-        super();
         
     }
 

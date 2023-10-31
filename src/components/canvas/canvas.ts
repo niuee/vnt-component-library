@@ -1,20 +1,18 @@
 import { World } from "../../2dphysics";
 import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "./VisualRigidBody";
-import {workerScript} from "../../workerscripts/phyworker";
-import {Bezier} from "bezier-js";
+import { workerScript } from "../../workerscripts/phyworker";
 import { BCurve } from "../../bezierCurve";
 
 export interface NonInteractiveUIComponent {
     draw(context: CanvasRenderingContext2D): void;
 }
 
-export interface CanvasUIComponent {
+export interface UIComponent {
     draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
-    raycast(cursorPosition: point): boolean;
 }
 
-export abstract class BaseCanvasUIComponent implements CanvasUIComponent {
+export abstract class BaseUIComponent implements UIComponent {
     protected center: {x: number, y: number};
     abstract draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
     abstract raycast(cursorPosition: point): boolean;
@@ -27,6 +25,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     private requestRef: number;
     private cameraOffset: {x: number, y: number} = {x: 0, y: 0};
     private cameraZoom: number = 1;
+    private cameraAngle: number = 45 * Math.PI / 180;
     private MAX_ZOOM: number = 5;
     private MIN_ZOOM: number = 0.01;
     private SCROLL_SENSITIVITY: number = 0.001;
@@ -35,7 +34,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     private lastZoom = this.cameraZoom;
     private maxTransWidth: number;
     private maxTransHeight: number;
-    private uiList: Map<string, CanvasUIComponent>;
+    private uiList: Map<string, UIComponent>;
     private nonInteractiveUILists: NonInteractiveUIComponent[];
     private prevTime: number;
     private simWorld: World;
@@ -86,7 +85,7 @@ export class CustomCanvas extends HTMLCanvasElement {
 
         this.maxTransHeight = 50000;
         this.maxTransWidth = 50000;
-        this.uiList = new Map<string, CanvasUIComponent>();
+        this.uiList = new Map<string, UIComponent>();
         this.nonInteractiveUILists = [];
         this.prevTime = 0;
         this.simWorld = new World();
@@ -103,12 +102,6 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     connectedCallback(){
-        let controlPoints = [{x: 90, y: 200}, {x: 25, y: 100}, {x: 220, y:40}];
-        let controlPoints2 = [{x: 30, y: 100}, {x: 25, y: 100}, {x: 220, y:40}];
-        let bezierCurve = new Bezier(controlPoints[0], controlPoints[1], controlPoints[2]);
-        let bCurve = new BCurve(controlPoints);
-        console.log(bezierCurve.length());
-        console.log(bCurve.calLength());
         this.requestRef = requestAnimationFrame(this.step);
     }
 
@@ -120,7 +113,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.nonInteractiveUILists.push(niUIComp);
     }
 
-    insertUIComponent(uiComponent: CanvasUIComponent) {
+    insertUIComponent(uiComponent: UIComponent) {
         this.uiList.set(crypto.randomUUID(), uiComponent);
     }
 
@@ -152,6 +145,10 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.context.translate( window.innerWidth / 2, window.innerHeight / 2 );
         this.context.scale(this.cameraZoom, this.cameraZoom);
         this.context.translate(this.cameraOffset.x,  this.cameraOffset.y);
+        this.context.rotate(this.cameraAngle);
+
+        // draw the x and y axis
+        this.drawAxis(this.context);
 
         // draw outer perimeter of the map
         this.context.beginPath();
@@ -206,6 +203,22 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.requestRef = requestAnimationFrame(this.step);
     }
 
+    drawAxis(context: CanvasRenderingContext2D): void{
+        // y axis
+        context.beginPath();
+        context.strokeStyle = `rgba(87, 173, 72, 0.8)`;
+        context.moveTo(0, 0);
+        context.lineTo(0, -this.maxTransHeight);
+        context.stroke();
+        
+        // x axis
+        context.beginPath();
+        context.strokeStyle = `rgba(220, 59, 59, 0.8)`;
+        context.moveTo(0, 0);
+        context.lineTo(this.maxTransWidth, 0);
+        context.stroke();
+    }
+
     drawCircles(context: CanvasRenderingContext2D, centerx: number, centery: number, size: number): void {
         context.strokeStyle = "rgb(0, 0, 0)";
         context.moveTo(centerx, centery);
@@ -228,8 +241,9 @@ export class CustomCanvas extends HTMLCanvasElement {
         return {x: onScreenPos.x / this.cameraZoom - this.cameraOffset.x, y: onScreenPos.y / this.cameraZoom - this.cameraOffset.y};
     }
 
-    getAbsPos(point: point): point {
-        return {x: point.x/this.cameraZoom - this.cameraOffset.x - (window.innerWidth / 2 / this.cameraZoom), y: point.y/this.cameraZoom - this.cameraOffset.y - (window.innerHeight / 2 / this.cameraZoom)};
+    getWorldPos(point: point): point {
+        // rotate the current res ccw (negative) radians (camera Angle)
+        return PointCal.rotatePoint({x: point.x/this.cameraZoom - this.cameraOffset.x - (window.innerWidth / 2 / this.cameraZoom), y: point.y/this.cameraZoom - this.cameraOffset.y - (window.innerHeight / 2 / this.cameraZoom)}, -this.cameraAngle);
     }
 
     onPointerUp(e: MouseEvent) {
@@ -244,10 +258,12 @@ export class CustomCanvas extends HTMLCanvasElement {
 
     onPointerDown(e: MouseEvent) {
         console.log("mouse pos in view", this.getEventLocation(e));
-        console.log("mouse pos in world coord", this.getAbsPos(this.getEventLocation(e)));
+        let convertedCoord = this.getWorldPos(this.getEventLocation(e));
+        convertedCoord.y = -convertedCoord.y;
+        console.log("mouse pos in world space ", convertedCoord);
         this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
             let vBody = body as VisualRigidBody;
-            if(vBody.raycast(this.getAbsPos(this.getEventLocation(e)))){
+            if(vBody.raycast(convertedCoord)){
                 console.log("clicked in body with ident: ", ident)
             }
         })
@@ -255,8 +271,8 @@ export class CustomCanvas extends HTMLCanvasElement {
         if (e.button == 0 && e.metaKey) {
             this.isDragging = true;
             this.dragStart = this.getDragOriginPos(e)
-            this.dragStart.x = this.getEventLocation(e).x/this.cameraZoom - this.cameraOffset.x;
-            this.dragStart.y = this.getEventLocation(e).y/this.cameraZoom - this.cameraOffset.y;
+            // this.dragStart.x = this.getEventLocation(e).x/this.cameraZoom - this.cameraOffset.x;
+            // this.dragStart.y = this.getEventLocation(e).y/this.cameraZoom - this.cameraOffset.y;
         } else if (e.button == 0) {
             let leftClickX = this.getEventLocation(e).x/this.cameraZoom - this.cameraOffset.x - (window.innerWidth / 2 / this.cameraZoom);
             let leftClickY = this.getEventLocation(e).y/this.cameraZoom - this.cameraOffset.y - (window.innerHeight / 2 / this.cameraZoom);
@@ -295,7 +311,7 @@ export class CustomCanvas extends HTMLCanvasElement {
             // console.log("Wheel with control key");
             // this is pinch zoom event from trackpad or scroll zoom event from a mouse
             // console.log("scrolling for zoom");
-            let originalWorldPos = this.getAbsPos(this.getEventLocation(e));
+            let originalWorldPos = this.getWorldPos(this.getEventLocation(e));
             if (!this.isDragging) {
                 if (zoomAmount) {
                     this.cameraZoom -= zoomAmount * 5;
@@ -306,8 +322,8 @@ export class CustomCanvas extends HTMLCanvasElement {
                 
                 this.cameraZoom = Math.min( this.cameraZoom, this.MAX_ZOOM )
                 this.cameraZoom = Math.max( this.cameraZoom, this.MIN_ZOOM )
-                // console.log("Diff in World Coordinate after zooming: ", PointCal.subVector(originalWorldPos, this.getAbsPos(this.getEventLocation(e))));
-                let posDiff = PointCal.subVector(originalWorldPos, this.getAbsPos(this.getEventLocation(e)));
+                // console.log("Diff in World Coordinate after zooming: ", PointCal.subVector(originalWorldPos, this.getWorldPos(this.getEventLocation(e))));
+                let posDiff = PointCal.subVector(originalWorldPos, this.getWorldPos(this.getEventLocation(e)));
                 if (originalWorldPos.x >= 0 && originalWorldPos.x <= this.maxTransWidth || originalWorldPos.x < 0 && originalWorldPos.x >= -this.maxTransWidth) {
                     this.cameraOffset.x -= posDiff.x;
                 }
@@ -326,7 +342,6 @@ export class CustomCanvas extends HTMLCanvasElement {
             // console.log("up most:", this.cameraOffset.y - ((this.height / 2) / this.cameraZoom));
             // console.log("down most:", this.cameraOffset.y + ((this.height / 2) / this.cameraZoom));
             
-            return;
         } 
         // console.log("wheelDeltaY:", e.wheelDeltaY, "deltaY:", e.deltaY); 
         // var isTouchPad = e.wheelDeltaY ? e.wheelDeltaY === -3 * e.deltaY : e.deltaMode === 0
@@ -336,7 +351,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         else{ //(Math.abs(e.deltaY) % 40 !== 0 || Math.abs(e.deltaY) == 0) {
             // when the scroll is actually a pan movement
             e.preventDefault();
-            // console.log("This is the world coordinate when panning:", this.getAbsPos(this.getEventLocation(e)));
+            // console.log("This is the world coordinate when panning:", this.getWorldPos(this.getEventLocation(e)));
             this.cameraOffset.x -= 0.5 * (e.deltaX / this.cameraZoom);
             this.cameraOffset.y -= 0.5 * (e.deltaY / this.cameraZoom);
 
