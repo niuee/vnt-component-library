@@ -23,7 +23,7 @@ export class CustomCanvas extends HTMLCanvasElement {
 
     private context: CanvasRenderingContext2D;
     private requestRef: number;
-    private cameraOffset: {x: number, y: number} = {x: 0, y: 0};
+    private cameraOffset: {x: number, y: number} = {x: 0, y: 300};
     private cameraZoom: number = 1;
     private cameraAngle: number = 45 * Math.PI / 180;
     private MAX_ZOOM: number = 5;
@@ -31,6 +31,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     private SCROLL_SENSITIVITY: number = 0.001;
     private isDragging: boolean = false;
     private dragStart: {x: number, y: number} = {x: 0, y: 0};
+    private dragOffset: {x: number, y: number} = {x: 0, y: 0};
     private lastZoom = this.cameraZoom;
     private maxTransWidth: number;
     private maxTransHeight: number;
@@ -141,8 +142,8 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.context.restore();
         this.context.translate( window.innerWidth / 2, window.innerHeight / 2 );
         this.context.scale(this.cameraZoom, this.cameraZoom);
-        this.context.translate(this.cameraOffset.x,  this.cameraOffset.y);
         this.context.rotate(this.cameraAngle);
+        this.context.translate(this.cameraOffset.x,  this.cameraOffset.y);
 
         // draw the x and y axis
         this.drawAxis(this.context);
@@ -233,14 +234,17 @@ export class CustomCanvas extends HTMLCanvasElement {
         }
     }
 
-    getDragOriginPos(e: MouseEvent): point {
-        let onScreenPos = this.getEventLocation(e);
-        return {x: onScreenPos.x / this.cameraZoom - this.cameraOffset.x, y: onScreenPos.y / this.cameraZoom - this.cameraOffset.y};
-    }
-
     getWorldPos(point: point): point {
         // rotate the current res ccw (negative) radians (camera Angle)
-        return PointCal.rotatePoint({x: point.x/this.cameraZoom - this.cameraOffset.x - (window.innerWidth / 2 / this.cameraZoom), y: point.y/this.cameraZoom - this.cameraOffset.y - (window.innerHeight / 2 / this.cameraZoom)}, -this.cameraAngle);
+        let translateScalePoint = {x: point.x / this.cameraZoom - (window.innerWidth / 2 / this.cameraZoom), y: point.y / this.cameraZoom - (window.innerHeight / 2 / this.cameraZoom)};
+        return PointCal.subVector(PointCal.transform2NewAxis(translateScalePoint, this.cameraAngle), this.cameraOffset);
+    }
+
+
+    getWorldPosWithOffset(point: point, offset: point): point {
+        // rotate the current res ccw (negative) radians (camera Angle)
+        let translateScalePoint = {x: point.x / this.cameraZoom - (window.innerWidth / 2 / this.cameraZoom), y: point.y / this.cameraZoom - (window.innerHeight / 2 / this.cameraZoom)};
+        return PointCal.subVector(PointCal.transform2NewAxis(translateScalePoint, this.cameraAngle), offset);
     }
 
     onPointerUp(e: MouseEvent) {
@@ -256,22 +260,22 @@ export class CustomCanvas extends HTMLCanvasElement {
     onPointerDown(e: MouseEvent) {
         console.log("mouse pos in view", this.getEventLocation(e));
         let convertedCoord = this.getWorldPos(this.getEventLocation(e));
-        convertedCoord.y = -convertedCoord.y;
-        console.log("mouse pos in world space ", convertedCoord);
+        console.log("mouse pos in world space ", this.convertCoord(convertedCoord));
         this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
             let vBody = body as VisualRigidBody;
-            if(vBody.raycast(convertedCoord)){
+            if(vBody.raycast(this.convertCoord(convertedCoord))){
                 console.log("clicked in body with ident: ", ident);
-                this.alignCameraWithObjOrientation(vBody.getOrientationAngle());
+                console.log("clicked body", vBody);
                 this.focusCameraOnObj(vBody);
+                this.alignCameraWithObjOrientation(vBody.getOrientationAngle());
+                
             }
         })
 
         if (e.button == 0 && e.metaKey) {
             this.isDragging = true;
-            this.dragStart = this.getDragOriginPos(e)
-            // this.dragStart.x = this.getEventLocation(e).x/this.cameraZoom - this.cameraOffset.x;
-            // this.dragStart.y = this.getEventLocation(e).y/this.cameraZoom - this.cameraOffset.y;
+            this.dragStart = this.getWorldPos(this.getEventLocation(e));
+            this.dragOffset = {...this.cameraOffset};
         } else if (e.button == 0) {
             let leftClickX = this.getEventLocation(e).x/this.cameraZoom - this.cameraOffset.x - (window.innerWidth / 2 / this.cameraZoom);
             let leftClickY = this.getEventLocation(e).y/this.cameraZoom - this.cameraOffset.y - (window.innerHeight / 2 / this.cameraZoom);
@@ -282,6 +286,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     onPointerMove(e:MouseEvent) {
         let convertCoord = this.getEventLocation(e);
         if (convertCoord == null){
+            console.log("test");
             return;
         }
         if (this.isDragging) {
@@ -289,8 +294,9 @@ export class CustomCanvas extends HTMLCanvasElement {
             // dragging cmaera
             let canvas = e.target as HTMLCanvasElement;
             canvas.style.cursor = "move";
-            this.cameraOffset.x = this.getEventLocation(e).x/this.cameraZoom - this.dragStart.x;
-            this.cameraOffset.y = this.getEventLocation(e).y/this.cameraZoom - this.dragStart.y;
+            console.log("mouse in frame pos", this.getWorldPos(convertCoord));
+            let diff = PointCal.subVector(this.getWorldPosWithOffset(convertCoord, this.dragOffset), this.dragStart);
+            this.cameraOffset = PointCal.addVector(this.dragOffset, diff);
 
             this.limitCameraOffset();
         }
@@ -324,7 +330,6 @@ export class CustomCanvas extends HTMLCanvasElement {
                 // console.log("Diff in World Coordinate after zooming: ", PointCal.subVector(originalWorldPos, this.getWorldPos(this.getEventLocation(e))));
                 let posDiff = PointCal.subVector(originalWorldPos, this.getWorldPos(this.getEventLocation(e)));
                 
-                posDiff = PointCal.rotatePoint(posDiff, this.cameraAngle);
                 if (originalWorldPos.x >= 0 && originalWorldPos.x <= this.maxTransWidth || originalWorldPos.x < 0 && originalWorldPos.x >= -this.maxTransWidth) {
                     this.cameraOffset.x -= posDiff.x;
                 }
@@ -352,8 +357,9 @@ export class CustomCanvas extends HTMLCanvasElement {
             // when the scroll is actually a pan movement
             e.preventDefault();
             // console.log("This is the world coordinate when panning:", this.getWorldPos(this.getEventLocation(e)));
-            this.cameraOffset.x -= 0.5 * (e.deltaX / this.cameraZoom);
-            this.cameraOffset.y -= 0.5 * (e.deltaY / this.cameraZoom);
+            let diff = PointCal.rotatePoint({x: e.deltaX, y: e.deltaY}, -this.cameraAngle);
+            this.cameraOffset.x -= 0.5 * (diff.x/ this.cameraZoom);
+            this.cameraOffset.y -= 0.5 * (diff.y / this.cameraZoom);
 
             // clipping camera panning
             if (this.cameraOffset.x < 0){
@@ -392,6 +398,11 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.cameraAngle = angle - (90 * Math.PI / 180);
     }
 
+    focusCameraOnObj(body: VisualRigidBody){
+        let windowFrameCoord = this.convertCoord(body.getCenter());
+        this.setCameraPos(windowFrameCoord);
+    }
+
     addRigidBody(rigidBody: VisualRigidBody): void{
         let ident = crypto.randomUUID();
         console.log("Adding body with ident: ", ident);
@@ -403,14 +414,6 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.cameraZoom = 1;
         this.cameraAngle = 0;
     }
-
-    focusCameraOnObj(body: VisualRigidBody){
-        let windowFrameCoord = this.convertCoord(body.getCenter());
-        console.log("body center in window frame", windowFrameCoord);
-
-        this.setCameraPos(PointCal.rotatePoint(windowFrameCoord, this.cameraAngle));
-    }
-
 
     setCameraPos(point: point): void{
         console.log("setting camera center to", point);
