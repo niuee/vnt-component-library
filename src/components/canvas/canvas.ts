@@ -2,7 +2,6 @@ import { World } from "../../2dphysics";
 import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "./VisualRigidBody";
 import { workerScript } from "../../workerscripts/phyworker";
-import { BCurve } from "../../bezierCurve";
 
 export interface NonInteractiveUIComponent {
     draw(context: CanvasRenderingContext2D): void;
@@ -11,13 +10,6 @@ export interface NonInteractiveUIComponent {
 export interface UIComponent {
     draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
 }
-
-export abstract class BaseUIComponent implements UIComponent {
-    protected center: {x: number, y: number};
-    abstract draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
-    abstract raycast(cursorPosition: point): boolean;
-}
-
 
 export class CustomCanvas extends HTMLCanvasElement {
 
@@ -48,6 +40,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     constructor(){
         super();
         this.tabSwitchingHandler = this.tabSwitchingHandler.bind(this);
+        this.step = this.step.bind(this);
         this.width = window.innerWidth;
         this.height = window.innerHeight;
         this.context = this.getContext("2d");
@@ -99,7 +92,6 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.keyController.set("KeyQ", false);
         this.keyController.set("KeyE", false);
 
-        this.step = this.step.bind(this);
     }
 
     connectedCallback(){
@@ -192,9 +184,6 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.simWorld.step(deltaTime);
         this.simWorld.getRigidBodyList().forEach((body, index)=> {
             let vBody = body as VisualRigidBody;
-            if(PointCal.distanceBetweenPoints(vBody.getLinearVelocity(), {x: 0, y: 0}) != 0){
-                console.log("test");
-            }
             vBody.draw(this.context, this.cameraZoom);
         })
 
