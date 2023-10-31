@@ -94,7 +94,11 @@ export abstract class BaseRigidBody implements RigidBody{
     }
 
     applyForce(force: point): void {
-        this.force = force;
+        if (PointCal.magnitude(this.force) !== 0){
+            this.force = PointCal.addVector(this.force, force);
+        } else {
+            this.force = force;
+        }
     }
 
     applyForceInOrientation(force: point | number): void {
