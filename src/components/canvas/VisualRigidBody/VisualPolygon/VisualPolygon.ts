@@ -4,9 +4,12 @@ import { VisualRigidBody } from "../VisualRigidBody";
 
 export class VisualPolygon extends VisualRigidBody{
 
-    constructor(center: point, vertices: point[], orientationAngle: number = 0, mass: number = 50, isStatic: boolean = false, frictionEnabled: boolean = true) {
+    private lineWidth: number = 0.3;
+
+    constructor(center: point, vertices: point[], orientationAngle: number = 0, mass: number = 50, isStatic: boolean = false, frictionEnabled: boolean = true, lineWidth: number = 0.3) {
         super(center, orientationAngle, mass, isStatic, frictionEnabled);
         this._rigidBody = new Polygon(center, vertices, orientationAngle, mass, isStatic, frictionEnabled);
+        this.lineWidth = lineWidth;
     }
 
     draw(context: CanvasRenderingContext2D): void {
@@ -24,7 +27,7 @@ export class VisualPolygon extends VisualRigidBody{
         context.beginPath();
         context.arc(center.x, -center.y, 1, 0, 2 * Math.PI);
         context.stroke();
-        context.lineWidth = 0.3;
+        context.lineWidth = this.lineWidth;
         context.beginPath();
         context.lineJoin = "round";
 
