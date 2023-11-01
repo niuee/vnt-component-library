@@ -2,8 +2,6 @@ import { BaseRigidBody, Polygon } from "../../../../2dphysics";
 import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "../VisualRigidBody";
 
-
-
 export class VisualPolygon extends VisualRigidBody{
 
     constructor(center: point, vertices: point[], orientationAngle: number = 0, mass: number = 50, isStatic: boolean = false, frictionEnabled: boolean = true) {
