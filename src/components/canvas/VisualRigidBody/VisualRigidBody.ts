@@ -7,6 +7,7 @@ export abstract class VisualRigidBody extends BaseRigidBody implements UICompone
 
     abstract draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
     abstract raycast(cursorPosition: point): boolean;
+    abstract getLargestDimension(): number;
 
     step(deltaTime: number): void{
         this._rigidBody.step(deltaTime);

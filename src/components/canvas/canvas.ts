@@ -2,9 +2,10 @@ import { World } from "../../2dphysics";
 import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "./VisualRigidBody";
 import { workerScript } from "../../workerscripts/phyworker";
+import { easeInOutQuint, easeInOutSine } from "../../easeFunctions";
 
 export interface NonInteractiveUIComponent {
-    draw(context: CanvasRenderingContext2D): void;
+    draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
 }
 
 export interface UIComponent {
@@ -38,6 +39,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     private dragStart: {x: number, y: number} = {x: 0, y: 0};
     private dragOffset: {x: number, y: number} = {x: 0, y: 0};
     private lastZoom = this.cameraZoom;
+    private cameraTransitionEasingFn: (x: number)=>number;
     private maxTransWidth: number;
     private maxTransHeight: number;
 
@@ -49,6 +51,8 @@ export class CustomCanvas extends HTMLCanvasElement {
     private keyController: Map<string, boolean>;
     private tempForce: number = 300;
     private worker: Worker;
+
+    
 
     constructor(){
         super();
@@ -108,6 +112,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.keyController.set("KeyQ", false);
         this.keyController.set("KeyE", false);
 
+        this.cameraTransitionEasingFn = easeInOutSine;
     }
 
     connectedCallback(){
@@ -189,7 +194,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         });
 
         this.nonInteractiveUILists.forEach((nuiComp)=>{
-            nuiComp.draw(this.context);
+            nuiComp.draw(this.context, this.cameraZoom);
         });
 
         // step and draw elements
@@ -203,21 +208,21 @@ export class CustomCanvas extends HTMLCanvasElement {
         // rotation
         if (this.cameraRotatingPercentage !== null && this.cameraRotatingPercentage <= 1){
             this.cameraRotatingPercentage += 1 * deltaTime;
-            let offset = this.easeInOutQuint(this.cameraRotatingPercentage);
+            let offset = this.cameraTransitionEasingFn(this.cameraRotatingPercentage);
             let offsetAngle = offset * this.cameraAngleTargetSpan;
             this.cameraAngle = this.cameraAngleOrigin + offsetAngle;
         }
         // translation
         if (this.cameraPanningPercentage !== null && this.cameraPanningPercentage <= 1){
             this.cameraPanningPercentage += 1 * deltaTime;
-            let offsetValue = this.easeInOutQuint(this.cameraPanningPercentage);
+            let offsetValue = this.cameraTransitionEasingFn(this.cameraPanningPercentage);
             let offset = PointCal.multiplyVectorByScalar(this.cameraOffsetTargetDirection, this.cameraOffsetTargetMagnitude * offsetValue);
             this.cameraOffset = PointCal.addVector(this.cameraPanningOrigin, offset);
         }
         // zoom
         if (this.cameraZoomingPercentage !== null && this.cameraZoomingPercentage <= 1){
             this.cameraZoomingPercentage += 1 * deltaTime;
-            let offsetVlaue = this.easeInOutQuint(this.cameraZoomingPercentage);
+            let offsetVlaue = this.cameraTransitionEasingFn(this.cameraZoomingPercentage);
             this.cameraZoom = this.cameraZoomOrigin + this.cameraZoomDiff * offsetVlaue;
         }
 
@@ -289,8 +294,12 @@ export class CustomCanvas extends HTMLCanvasElement {
             if(vBody.raycast(this.convertCoord(convertedCoord))){
                 console.log("clicked in body with ident: ", ident);
                 console.log("clicked body", vBody);
+                console.log("current body width in px on screen:", this.cameraZoom * vBody.getLargestDimension());
+                let targetDimension = 0.05 * this.width;
+                console.log("target zoom level would be:", targetDimension / vBody.getLargestDimension());
+                this.setCameraZoom(targetDimension / vBody.getLargestDimension());
                 this.focusCameraOnObj(vBody);
-                this.alignCameraWithObjOrientation(vBody);
+                this.alignCameraWithObjOrientationWithoutTransition(vBody);
             }
         })
 
@@ -339,7 +348,6 @@ export class CustomCanvas extends HTMLCanvasElement {
             //NOTE Zooming
             // console.log("Wheel with control key");
             // this is pinch zoom event from trackpad or scroll zoom event from a mouse
-            // console.log("scrolling for zoom");
             this.cameraZoomingPercentage = null;
             let originalWorldPos = this.getWorldPos(this.getEventLocation(e));
             if (!this.isDragging) {
@@ -446,6 +454,15 @@ export class CustomCanvas extends HTMLCanvasElement {
         return {x: point.x, y: -point.y};
     }
 
+    alignCameraWithObjOrientationWithoutTransition(body: VisualRigidBody){
+        if (this.cameraOffsetOutOfBound(this.convert2CameraCoord(this.convertCoord(body.getCenter())))){
+            console.log("target camera position if outside of map");
+            return;
+        }
+        let targetAngle = body.getOrientationAngle() - (90 * Math.PI / 180);
+        this.cameraAngle = targetAngle;
+    }
+
     alignCameraWithObjOrientation(body: VisualRigidBody){
         if (this.cameraOffsetOutOfBound(this.convert2CameraCoord(this.convertCoord(body.getCenter())))){
             console.log("target camera position if outside of map");
@@ -480,6 +497,14 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.cameraPanningOrigin = this.cameraOffset;
     }
 
+    focusCameraOnObjWithoutTransition(body: VisualRigidBody){
+        if (this.cameraOffsetOutOfBound(this.convert2CameraCoord(this.convertCoord(body.getCenter())))){
+            console.log("target camera position if outside of map");
+            return;
+        }
+        this.cameraOffset = this.convert2CameraCoord(this.convertCoord(body.getCenter()));
+    }
+
     focusCameraOn(point: point){
         if (this.cameraOffsetOutOfBound(point)){
             console.log("target camera position if outside of map");
@@ -492,10 +517,22 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.cameraPanningOrigin = this.cameraOffset;
     }
 
-    setCameraZoomWithTransition(zoomLevel: number){
+    focusCameraOnWithoutTransition(point: point){
+        if (this.cameraOffsetOutOfBound(point)){
+            console.log("target camera position if outside of map");
+            return;
+        }
+        this.cameraOffset = point;
+    }
+
+    setCameraZoom(zoomLevel: number){
         this.cameraZoomOrigin = this.cameraZoom;
         this.cameraZoomDiff = zoomLevel - this.cameraZoom;
         this.cameraZoomingPercentage = 0;
+    }
+
+    setCameraZoomWithoutTransition(zoomLevel: number){
+        this.cameraZoom = zoomLevel;
     }
 
     convert2CameraCoord(point: point){
@@ -503,7 +540,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     resetCamera(): void{
-        this.setCameraZoomWithTransition(1);
+        this.setCameraZoom(1);
         this.focusCameraOn({x: 0, y: 0});
         this.alignCameraWithAngle(0);
     }
@@ -583,8 +620,5 @@ export class CustomCanvas extends HTMLCanvasElement {
         }
     }
 
-    easeInOutQuint(x: number): number {
-        return x < 0.5 ? 16 * x * x * x * x * x : 1 - Math.pow(-2 * x + 2, 5) / 2;
-    }
 }
 

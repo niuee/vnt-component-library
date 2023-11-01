@@ -18,7 +18,7 @@ class NICircle implements NonInteractiveUIComponent {
         return this.center;
     }
 
-    draw(context: CanvasRenderingContext2D): void {
+    draw(context: CanvasRenderingContext2D, cameraZoom: number): void {
         context.beginPath();
         context.arc(this.center.x, -this.center.y, 3, 0, Math.PI * 2);
         context.stroke();
@@ -43,7 +43,7 @@ class NILine implements NonInteractiveUIComponent {
         return this.endPoint;
     }
 
-    draw(ctx: CanvasRenderingContext2D) {
+    draw(ctx: CanvasRenderingContext2D, cameraZoom: number) {
         ctx.beginPath();
         ctx.moveTo(this.startPoint.x, -this.startPoint.y);
         ctx.lineTo(this.endPoint.x, -this.endPoint.y);
@@ -58,12 +58,12 @@ class NILine implements NonInteractiveUIComponent {
         ctx.textBaseline = "middle";
         ctx.fillText("S", this.startPoint.x, -this.startPoint.y);
         ctx.fillText("E", this.endPoint.x, -this.endPoint.y);
-        
     }
 }
 
 customElements.define('custom-canvas', CustomCanvas, {extends: "canvas"});
 customElements.define('wheel-dial', Dial);
+
 let element = document.querySelector("#test-element") as CustomCanvas;
 
 let testTrack = new Track({x: 0, y: 0}, {x: 100, y: 200}, {x: 300, y: 400}, {x: 500, y: 600});
@@ -79,4 +79,3 @@ let button = document.querySelector("button");
 if (button) {
     button.onclick = () => element.resetCamera();
 }
-

@@ -12,7 +12,7 @@ export class VisualPolygon extends VisualRigidBody{
         this.lineWidth = lineWidth;
     }
 
-    draw(context: CanvasRenderingContext2D): void {
+    draw(context: CanvasRenderingContext2D, cameraZoom: number): void {
         let body = this._rigidBody as Polygon;
         let points = body.getVerticesAbsCoord();
         let center = body.getCenter();
@@ -36,10 +36,7 @@ export class VisualPolygon extends VisualRigidBody{
         }
 
         points.forEach((point, index, array) => { 
-            if (index == points.length - 1) {
-                // last one need to wrap to the first point
-                context.lineTo(array[0].x, -array[0].y);
-            }else {
+            if (index < points.length - 1){
                 context.lineTo(array[index + 1].x, -array[index + 1].y);
             }
         });
@@ -47,6 +44,19 @@ export class VisualPolygon extends VisualRigidBody{
         context.stroke();
         context.lineWidth = 1;
         context.lineJoin = "miter";
+    }
+
+    getLargestDimension(): number {
+        let body = this._rigidBody as Polygon;
+        let points = body.getVerticesAbsCoord();
+        let res = 0;
+        points.forEach((point, index, array) => { 
+            if (index < points.length - 1){
+                res = Math.max(res, PointCal.distanceBetweenPoints(array[index], array[index + 1]));
+            }
+        });
+
+        return res;
     }
 
     raycast(cursorPosition: point): boolean {
