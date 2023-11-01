@@ -15,9 +15,13 @@ export class CustomCanvas extends HTMLCanvasElement {
 
     private context: CanvasRenderingContext2D;
     private requestRef: number;
+
     private cameraOffset: {x: number, y: number} = {x: 0, y: 300};
     private cameraZoom: number = 1;
     private cameraAngle: number = 45 * Math.PI / 180;
+    private targetCameraAngle: number;
+    private targetCameraOffset: point;
+    private cameraRotationSpeed: number = 600 * Math.PI / 180; // radians per second
     private MAX_ZOOM: number = 5;
     private MIN_ZOOM: number = 0.01;
     private SCROLL_SENSITIVITY: number = 0.001;
@@ -27,6 +31,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     private lastZoom = this.cameraZoom;
     private maxTransWidth: number;
     private maxTransHeight: number;
+
     private uiList: Map<string, UIComponent>;
     private nonInteractiveUILists: NonInteractiveUIComponent[];
     private prevTime: number;
@@ -41,20 +46,23 @@ export class CustomCanvas extends HTMLCanvasElement {
         super();
         this.tabSwitchingHandler = this.tabSwitchingHandler.bind(this);
         this.step = this.step.bind(this);
+
         this.width = window.innerWidth;
         this.height = window.innerHeight;
         this.context = this.getContext("2d");
         this.style.overflowY = "hidden";
         this.style.background = "white";
-        this.lastTimeUpdate = Date.now();
+        
 
         this.context.save();
+
         this.addEventListener('mousedown', this.onPointerDown);
         this.addEventListener('mouseup', this.onPointerUp);
         this.addEventListener('mousemove', this.onPointerMove);
         this.addEventListener( 'wheel', (e) => this.scrollHandler(e, e.deltaY*this.SCROLL_SENSITIVITY, 0.1));
 
         this.worker = new Worker(workerScript);
+        this.lastTimeUpdate = Date.now();
         this.worker.onmessage = (data)=>{
             let nowTime = Date.now();
             let deltaTime = nowTime - this.lastTimeUpdate;
@@ -77,8 +85,8 @@ export class CustomCanvas extends HTMLCanvasElement {
             }
         });
 
-        this.maxTransHeight = 50000;
-        this.maxTransWidth = 50000;
+        this.maxTransHeight = 25000;
+        this.maxTransWidth = 25000;
         this.uiList = new Map<string, UIComponent>();
         this.nonInteractiveUILists = [];
         this.prevTime = 0;
@@ -95,6 +103,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     connectedCallback(){
+        console.log(this.targetCameraAngle !== undefined);
         this.requestRef = requestAnimationFrame(this.step);
     }
 
@@ -185,7 +194,21 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.simWorld.getRigidBodyList().forEach((body, index)=> {
             let vBody = body as VisualRigidBody;
             vBody.draw(this.context, this.cameraZoom);
-        })
+        });
+
+        // camera transition
+        if (this.targetCameraAngle !== null && this.targetCameraAngle !== undefined) {
+            // console.log("transitioning");
+            let diff = Math.abs(this.targetCameraAngle - this.cameraAngle) > Math.PI ? this.cameraAngle - this.targetCameraAngle : this.targetCameraAngle - this.cameraAngle;
+            if (Math.abs(diff) <= this.cameraRotationSpeed * deltaTime){
+                this.cameraAngle = this.targetCameraAngle;
+                this.targetCameraAngle = null;
+            } else {
+                const rotationDelta = this.cameraRotationSpeed * deltaTime * (diff >= 0 ? 1 : -1);
+                console.log(rotationDelta);
+                this.cameraAngle += rotationDelta;
+            }
+        }
 
         this.requestRef = requestAnimationFrame(this.step);
     }
@@ -224,14 +247,15 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     getWorldPos(point: point): point {
-        // rotate the current res ccw (negative) radians (camera Angle)
+        // transform window frame coordinate (top left corner is origin y axis positive is down x axis positive is right) to the window world coordinate
+        // to convert to the physics world coordinate need to call convertCoord(res) with the result as parameter
         let translateScalePoint = {x: point.x / this.cameraZoom - (window.innerWidth / 2 / this.cameraZoom), y: point.y / this.cameraZoom - (window.innerHeight / 2 / this.cameraZoom)};
         return PointCal.subVector(PointCal.transform2NewAxis(translateScalePoint, this.cameraAngle), this.cameraOffset);
     }
 
 
     getWorldPosWithOffset(point: point, offset: point): point {
-        // rotate the current res ccw (negative) radians (camera Angle)
+        // transform window frame coordinate to window world coordinate with a specified camera offset; this function is specifically for when translating the camera using mouse and keyboard to preserve previous cameraoffset
         let translateScalePoint = {x: point.x / this.cameraZoom - (window.innerWidth / 2 / this.cameraZoom), y: point.y / this.cameraZoom - (window.innerHeight / 2 / this.cameraZoom)};
         return PointCal.subVector(PointCal.transform2NewAxis(translateScalePoint, this.cameraAngle), offset);
     }
@@ -384,7 +408,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     alignCameraWithObjOrientation(angle: number){
-        this.cameraAngle = angle - (90 * Math.PI / 180);
+        this.targetCameraAngle = angle - (90 * Math.PI / 180);
     }
 
     focusCameraOnObj(body: VisualRigidBody){
