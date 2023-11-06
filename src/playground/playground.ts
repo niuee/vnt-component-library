@@ -1,8 +1,7 @@
 // dev-server.ts
 import { CustomCanvas, NonInteractiveUIComponent} from '../components';
 import { VisualPolygon } from '../components';
-import { Dial } from '../components';
-import { getLineIntersection, projectPointOntoLine } from "../algos";
+import { Dial, CustomCanvasWebkit } from '../components';
 import { point } from 'point2point';
 import { Track } from '../track';
 
@@ -63,19 +62,24 @@ class NILine implements NonInteractiveUIComponent {
 
 customElements.define('custom-canvas', CustomCanvas, {extends: "canvas"});
 customElements.define('wheel-dial', Dial);
+customElements.define('canvas-webkit', CustomCanvasWebkit);
+window.onload = ()=>{
+    let element = document.getElementById("test-graph") as CustomCanvasWebkit;
+    console.log(element);
 
-let element = document.querySelector("#test-element") as CustomCanvas;
+    let testTrack = new Track({x: 0, y: 0}, {x: 100, y: 200}, {x: 300, y: 400}, {x: 500, y: 600});
 
-let testTrack = new Track({x: 0, y: 0}, {x: 100, y: 200}, {x: 300, y: 400}, {x: 500, y: 600});
-element.insertUIComponent(testTrack);
+    let testPolygon = new VisualPolygon({x: 300, y: 300}, [{x: 10, y: 10}, {x: 10, y: -10}, {x: -10, y: -10}, {x: -10, y: 10}], 0, 50, false, true);
+    let testStaticPolygon = new VisualPolygon({x: 50, y: 0}, [{x: 5, y: 5}, {x: 5, y: -5}, {x: -5, y: -5}, {x: -5, y: 5}], 115 *  Math.PI / 180, 50, false, true);
 
-let testPolygon = new VisualPolygon({x: 300, y: 300}, [{x: 10, y: 10}, {x: 10, y: -10}, {x: -10, y: -10}, {x: -10, y: 10}], 0, 50, false, true);
-let testStaticPolygon = new VisualPolygon({x: 50, y: 0}, [{x: 5, y: 5}, {x: 5, y: -5}, {x: -5, y: -5}, {x: -5, y: 5}], 115 *  Math.PI / 180, 50, false, true);
+    element.addRigidBody(testPolygon);
+    element.addRigidBody(testStaticPolygon);
 
-element.addRigidBody(testPolygon);
-element.addRigidBody(testStaticPolygon);
+    element.insertNIUIComponent(testTrack);
 
-let button = document.querySelector("button");
-if (button) {
-    button.onclick = () => element.resetCamera();
+    let button = document.querySelector("button");
+    if (button) {
+        button.onclick = (e) => element.resetCamera();
+    }
+
 }

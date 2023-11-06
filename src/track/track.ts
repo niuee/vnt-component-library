@@ -12,7 +12,7 @@ export class Track implements UIComponent{
         this._internBCurve = new Bezier(controlPoint1, controlPoint2, controlPoint3, controlPoint4);
     }
 
-    draw(ctx: CanvasRenderingContext2D){
+    draw(ctx: CanvasRenderingContext2D, cameraZoom: number){
         ctx.lineWidth = 1;
         ctx.beginPath();
         if (this._internBCurve.points.length === 3){

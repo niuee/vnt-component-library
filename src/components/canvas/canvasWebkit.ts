@@ -3,18 +3,18 @@ import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "./VisualRigidBody";
 import { workerScript } from "../../workerscripts/phyworker";
 import { easeInOutQuint, easeInOutSine, linear } from "../../easeFunctions";
+import { UIComponent, NonInteractiveUIComponent } from "./canvas";
 
-export interface NonInteractiveUIComponent {
-    draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
-}
+const template = `<canvas></canvas>`
 
-export interface UIComponent {
-    draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
-}
+export class CustomCanvasWebkit extends HTMLElement {
 
-export class CustomCanvas extends HTMLCanvasElement {
 
+    private width: number;
+    private height: number;
+    private _canvas: HTMLCanvasElement = document.createElement("canvas");
     private context: CanvasRenderingContext2D;
+
     private requestRef: number;
 
     private cameraOffset: {x: number, y: number} = {x: 0, y: 0};
@@ -25,7 +25,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     private cameraLockedOnPoint: point = null; // this is defined in the camera world space coordinate
     private cameraLockedOnObj: VisualRigidBody = null;
 
-    private cameraAngle: number = 0 * Math.PI / 180;
+    private cameraAngle: number = 45 * Math.PI / 180;
     private cameraRotatingPercentage: number = null; // from 0 to 1 camera rotation operation percentage; used for animation purposes
     private cameraAngleOrigin: number = null; 
     private cameraAngleTargetSpan: number = null;
@@ -63,19 +63,21 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.tabSwitchingHandler = this.tabSwitchingHandler.bind(this);
         this.step = this.step.bind(this);
 
-        this.width = window.innerWidth ;
+        this._canvas.width = window.innerWidth ;
+        this._canvas.height = window.innerHeight;
+        this.width = window.innerWidth;
         this.height = window.innerHeight;
-        this.context = this.getContext("2d");
-        this.style.background = "gray";
+        this.context = this._canvas.getContext("2d");
+        this._canvas.style.background = "gray";
         // this.topLeftCorner = {x: this.getBoundingClientRect().x, y: this.getBoundingClientRect().y};
         
 
         this.context.save();
 
-        this.addEventListener('mousedown', this.onPointerDown);
-        this.addEventListener('mouseup', this.onPointerUp);
-        this.addEventListener('mousemove', this.onPointerMove);
-        this.addEventListener( 'wheel', (e) => this.scrollHandler(e, e.deltaY*this.SCROLL_SENSITIVITY, 0.1));
+        this._canvas.addEventListener('mousedown', this.onPointerDown.bind(this));
+        this._canvas.addEventListener('mouseup', this.onPointerUp.bind(this));
+        this._canvas.addEventListener('mousemove', this.onPointerMove.bind(this));
+        this._canvas.addEventListener( 'wheel', (e) => this.scrollHandler(e, e.deltaY*this.SCROLL_SENSITIVITY, 0.1));
         // this.addEventListener( 'touchstart', this.pointerDownHandler);
 
         this.worker = new Worker(workerScript);
@@ -118,9 +120,12 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.keyController.set("KeyE", false);
 
         this.cameraTransitionEasingFn = easeInOutSine;
+        this.attachShadow({mode: "open"});
     }
 
     connectedCallback(){
+        console.log("event location function", this.getEventLocation);
+        this.shadowRoot.appendChild(this._canvas);
         this.requestRef = requestAnimationFrame(this.step);
     }
 
@@ -152,8 +157,8 @@ export class CustomCanvas extends HTMLCanvasElement {
         // setting width and height of the canvas resets the contents in the canvas
         // this.width = this.width;
         // this.height = this.height;
-        this.width = window.innerWidth;
-        this.height = window.innerHeight;
+        this._canvas.width = window.innerWidth;
+        this._canvas.height = window.innerHeight;
 
         this.context.restore();
         this.context.translate( this.width / 2, this.height / 2 );
@@ -315,8 +320,10 @@ export class CustomCanvas extends HTMLCanvasElement {
         console.log("mouse pos in view", this.getEventLocation(e));
         let convertedCoord = this.getWorldPos(this.getEventLocation(e));
         console.log("mouse pos in world space ", this.convertCoord(convertedCoord));
+        console.log("simworld", this.simWorld);
         this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
             let vBody = body as VisualRigidBody;
+            console.log("vbody", vBody);
             if(vBody.raycast(this.convertCoord(convertedCoord))){
                 console.log("clicked in body with ident: ", ident);
                 console.log("clicked body", vBody);
