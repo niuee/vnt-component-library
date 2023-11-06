@@ -170,6 +170,10 @@ export function easeInOutBounce(x: number): number {
 }
 
 
+export function linear(x: number): number{
+    return x;
+}
+
 /*
 Functions taken from https://github.com/ai/easings.net
 

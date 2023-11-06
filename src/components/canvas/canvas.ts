@@ -2,7 +2,7 @@ import { World } from "../../2dphysics";
 import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "./VisualRigidBody";
 import { workerScript } from "../../workerscripts/phyworker";
-import { easeInOutQuint, easeInOutSine } from "../../easeFunctions";
+import { easeInOutQuint, easeInOutSine, linear } from "../../easeFunctions";
 
 export interface NonInteractiveUIComponent {
     draw(context: CanvasRenderingContext2D, cameraZoom: number): void;
@@ -34,7 +34,7 @@ export class CustomCanvas extends HTMLCanvasElement {
     private cameraZoomDiff: number = null;
     private MAX_ZOOM: number = 5;
     private MIN_ZOOM: number = 0.01;
-    private SCROLL_SENSITIVITY: number = 0.001;
+    private SCROLL_SENSITIVITY: number = 0.005;
     private isDragging: boolean = false;
     private dragStart: {x: number, y: number} = {x: 0, y: 0};
     private dragOffset: {x: number, y: number} = {x: 0, y: 0};
@@ -52,18 +52,18 @@ export class CustomCanvas extends HTMLCanvasElement {
     private tempForce: number = 300;
     private worker: Worker;
 
-    
+    private topLeftCorner: point;
 
     constructor(){
         super();
         this.tabSwitchingHandler = this.tabSwitchingHandler.bind(this);
         this.step = this.step.bind(this);
 
-        this.width = window.innerWidth;
-        this.height = window.innerHeight;
+        // this.width = window.innerWidth / 2;
+        // this.height = window.innerHeight / 2;
         this.context = this.getContext("2d");
-        this.style.overflowY = "hidden";
         this.style.background = "white";
+        this.topLeftCorner = {x: this.getBoundingClientRect().x, y: this.getBoundingClientRect().y};
         
 
         this.context.save();
@@ -72,6 +72,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.addEventListener('mouseup', this.onPointerUp);
         this.addEventListener('mousemove', this.onPointerMove);
         this.addEventListener( 'wheel', (e) => this.scrollHandler(e, e.deltaY*this.SCROLL_SENSITIVITY, 0.1));
+        // this.addEventListener( 'touchstart', this.pointerDownHandler);
 
         this.worker = new Worker(workerScript);
         this.lastTimeUpdate = Date.now();
@@ -144,12 +145,12 @@ export class CustomCanvas extends HTMLCanvasElement {
         deltaTime /= 1000;
         this.prevTime = timestamp;
 
-
-        this.width = window.innerWidth;
-        this.height = window.innerHeight;
+        // setting width and height of the canvas resets the contents in the canvas
+        this.width = this.width;
+        this.height = this.height;
 
         this.context.restore();
-        this.context.translate( window.innerWidth / 2, window.innerHeight / 2 );
+        this.context.translate( this.width / 2, this.height / 2 );
         this.context.scale(this.cameraZoom, this.cameraZoom);
         this.context.rotate(this.cameraAngle);
         this.context.translate(this.cameraOffset.x,  this.cameraOffset.y);
@@ -209,6 +210,9 @@ export class CustomCanvas extends HTMLCanvasElement {
         if (this.cameraRotatingPercentage !== null && this.cameraRotatingPercentage <= 1){
             this.cameraRotatingPercentage += 1 * deltaTime;
             let offset = this.cameraTransitionEasingFn(this.cameraRotatingPercentage);
+            if (this.cameraRotatingPercentage > 1){
+                offset = this.cameraTransitionEasingFn(1);
+            }
             let offsetAngle = offset * this.cameraAngleTargetSpan;
             this.cameraAngle = this.cameraAngleOrigin + offsetAngle;
         }
@@ -216,15 +220,22 @@ export class CustomCanvas extends HTMLCanvasElement {
         if (this.cameraPanningPercentage !== null && this.cameraPanningPercentage <= 1){
             this.cameraPanningPercentage += 1 * deltaTime;
             let offsetValue = this.cameraTransitionEasingFn(this.cameraPanningPercentage);
+            if (this.cameraPanningPercentage > 1){
+                offsetValue = this.cameraTransitionEasingFn(1);
+            }
             let offset = PointCal.multiplyVectorByScalar(this.cameraOffsetTargetDirection, this.cameraOffsetTargetMagnitude * offsetValue);
             this.cameraOffset = PointCal.addVector(this.cameraPanningOrigin, offset);
         }
         // zoom
         if (this.cameraZoomingPercentage !== null && this.cameraZoomingPercentage <= 1){
             this.cameraZoomingPercentage += 1 * deltaTime;
-            let offsetVlaue = this.cameraTransitionEasingFn(this.cameraZoomingPercentage);
-            this.cameraZoom = this.cameraZoomOrigin + this.cameraZoomDiff * offsetVlaue;
+            let offsetValue = this.cameraTransitionEasingFn(this.cameraZoomingPercentage);
+            if (this.cameraZoomingPercentage > 1){
+                offsetValue = this.cameraTransitionEasingFn(1);
+            }
+            this.cameraZoom = this.cameraZoomOrigin + this.cameraZoomDiff * offsetValue;
         }
+
 
         this.requestRef = requestAnimationFrame(this.step);
     }
@@ -254,9 +265,9 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     getEventLocation(e: UIEvent): point {
-        // if (e instanceof TouchEvent && e.touches.length == 1) {
-        //     return { x:e.touches[0].clientX, y: e.touches[0].clientY };
-        // }
+        if (window.TouchEvent !== undefined && e instanceof TouchEvent && e.touches.length == 1) {
+            return { x:e.touches[0].clientX, y: e.touches[0].clientY };
+        }
         if (e instanceof MouseEvent){
             return { x: e.clientX, y: e.clientY };
         }
@@ -265,13 +276,15 @@ export class CustomCanvas extends HTMLCanvasElement {
     getWorldPos(point: point): point {
         // transform window frame coordinate (top left corner is origin y axis positive is down x axis positive is right) to the window world coordinate
         // to convert to the physics world coordinate need to call convertCoord(res) with the result as parameter
-        let translateScalePoint = {x: point.x / this.cameraZoom - (window.innerWidth / 2 / this.cameraZoom), y: point.y / this.cameraZoom - (window.innerHeight / 2 / this.cameraZoom)};
+        point = PointCal.subVector(point, this.topLeftCorner);
+        let translateScalePoint = {x: point.x / this.cameraZoom - (this.width / 2 / this.cameraZoom), y: point.y / this.cameraZoom - (this.height / 2 / this.cameraZoom)};
         return PointCal.subVector(PointCal.transform2NewAxis(translateScalePoint, this.cameraAngle), this.cameraOffset);
     }
 
     getWorldPosWithOffset(point: point, offset: point): point {
         // transform window frame coordinate to window world coordinate with a specified camera offset; this function is specifically for when translating the camera using mouse and keyboard to preserve previous cameraoffset
-        let translateScalePoint = {x: point.x / this.cameraZoom - (window.innerWidth / 2 / this.cameraZoom), y: point.y / this.cameraZoom - (window.innerHeight / 2 / this.cameraZoom)};
+        point = PointCal.subVector(point, this.topLeftCorner);
+        let translateScalePoint = {x: point.x / this.cameraZoom - (this.width / 2 / this.cameraZoom), y: point.y / this.cameraZoom - (this.height / 2 / this.cameraZoom)};
         return PointCal.subVector(PointCal.transform2NewAxis(translateScalePoint, this.cameraAngle), offset);
     }
 
@@ -299,7 +312,7 @@ export class CustomCanvas extends HTMLCanvasElement {
                 console.log("target zoom level would be:", targetDimension / vBody.getLargestDimension());
                 this.setCameraZoom(targetDimension / vBody.getLargestDimension());
                 this.focusCameraOnObj(vBody);
-                this.alignCameraWithObjOrientationWithoutTransition(vBody);
+                this.alignCameraWithObjOrientation(vBody);
             }
         })
 
@@ -407,6 +420,7 @@ export class CustomCanvas extends HTMLCanvasElement {
                 this.cameraOffset.y = Math.min(this.maxTransHeight, this.cameraOffset.y);
             }
         } 
+        console.log("Current Top left Corner:", this.getWorldPos({x: 0, y: 0}));
     }
 
     private limitCameraOffset(){
@@ -526,6 +540,12 @@ export class CustomCanvas extends HTMLCanvasElement {
     }
 
     setCameraZoom(zoomLevel: number){
+        if (zoomLevel > this.MAX_ZOOM){
+            zoomLevel = this.MAX_ZOOM;
+        }
+        if (zoomLevel < this.MIN_ZOOM){
+            zoomLevel = this.MIN_ZOOM;
+        }
         this.cameraZoomOrigin = this.cameraZoom;
         this.cameraZoomDiff = zoomLevel - this.cameraZoom;
         this.cameraZoomingPercentage = 0;
@@ -620,5 +640,8 @@ export class CustomCanvas extends HTMLCanvasElement {
         }
     }
 
+    pointerDownHandler(event){
+        console.log("test");
+    }
 }
 
