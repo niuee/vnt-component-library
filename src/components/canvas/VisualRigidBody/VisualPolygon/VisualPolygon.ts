@@ -31,7 +31,7 @@ export class VisualPolygon extends VisualRigidBody{
         context.beginPath();
         context.lineJoin = "round";
 
-        if (points.length >= 0) {
+        if (points.length > 0) {
             context.moveTo(points[0].x, -points[0].y);
         }
 
