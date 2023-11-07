@@ -8,11 +8,13 @@
 <body style="margin: 0; overflow: hidden;">
   <!-- Add any necessary HTML markup here -->
   <div style="height: 100%; width: 100%; position: relative;">
-    <!-- <canvas id="test-element" is="custom-canvas" width="400px" height="500px"></canvas> -->
-    <canvas-webkit id="test-graph"></canvas-webkit>
+    <!-- <canvas id="test-element" is="custom-canvas" width="400px" height="500px"></canvas>
+    width="700" height="500" style="position: absolute; top: 100px; left: 100px;" -->
+    <canvas-webkit id="test-graph" width="700" height="500" style="position: absolute; top: 100px; left: 100px;" ></canvas-webkit>
     <div style="position: absolute; top: 0; left: 0;">
       <button>Reset Camera</button>
-      <wheel-dial>
+      <dial-component angle="45"></dial-component>
+      <!-- <wheel-dial width="50vw" height="50vh"> -->
       </wheel-dial>
     </div>
   </div>

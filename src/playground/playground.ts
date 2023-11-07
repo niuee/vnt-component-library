@@ -65,7 +65,6 @@ customElements.define('wheel-dial', Dial);
 customElements.define('canvas-webkit', CustomCanvasWebkit);
 window.onload = ()=>{
     let element = document.getElementById("test-graph") as CustomCanvasWebkit;
-    console.log(element);
 
     let testTrack = new Track({x: 0, y: 0}, {x: 100, y: 200}, {x: 300, y: 400}, {x: 500, y: 600});
 

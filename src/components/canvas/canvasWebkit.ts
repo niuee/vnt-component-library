@@ -5,7 +5,7 @@ import { workerScript } from "../../workerscripts/phyworker";
 import { easeInOutQuint, easeInOutSine, linear } from "../../easeFunctions";
 import { UIComponent, NonInteractiveUIComponent } from "./canvas";
 
-const template = `<canvas></canvas>`
+
 
 export class CustomCanvasWebkit extends HTMLElement {
 
@@ -25,7 +25,7 @@ export class CustomCanvasWebkit extends HTMLElement {
     private cameraLockedOnPoint: point = null; // this is defined in the camera world space coordinate
     private cameraLockedOnObj: VisualRigidBody = null;
 
-    private cameraAngle: number = 45 * Math.PI / 180;
+    private cameraAngle: number = 0 * Math.PI / 180;
     private cameraRotatingPercentage: number = null; // from 0 to 1 camera rotation operation percentage; used for animation purposes
     private cameraAngleOrigin: number = null; 
     private cameraAngleTargetSpan: number = null;
@@ -34,6 +34,7 @@ export class CustomCanvasWebkit extends HTMLElement {
     private cameraZoomingPercentage: number = null; // from 0 to 1 camera zoom operation percentage; used for animation purposes
     private cameraZoomOrigin: number = null;
     private cameraZoomDiff: number = null;
+    private cameraZoomFactor: number = 0.1;
     private MAX_ZOOM: number = 5;
     private MIN_ZOOM: number = 0.01;
     private SCROLL_SENSITIVITY: number = 0.005;
@@ -55,30 +56,39 @@ export class CustomCanvasWebkit extends HTMLElement {
     private worker: Worker;
 
     private topLeftCorner: point;
+    static observedAttributes = ["width", "height", "full-screen", "style"];
 
     private idGen: number = 0;
 
+    private startTouchPointDistance: number;
+    private startTouchPoints: point[];
+
     constructor(){
         super();
+        
         this.tabSwitchingHandler = this.tabSwitchingHandler.bind(this);
         this.step = this.step.bind(this);
 
-        this._canvas.width = window.innerWidth ;
-        this._canvas.height = window.innerHeight;
-        this.width = window.innerWidth;
-        this.height = window.innerHeight;
+        this._canvas.width = this.width;
+        this._canvas.height = this.height;
         this.context = this._canvas.getContext("2d");
         this._canvas.style.background = "gray";
-        // this.topLeftCorner = {x: this.getBoundingClientRect().x, y: this.getBoundingClientRect().y};
+        this.topLeftCorner = {x: this._canvas.getBoundingClientRect().x, y: this._canvas.getBoundingClientRect().y};
         
 
         this.context.save();
 
-        this._canvas.addEventListener('mousedown', this.onPointerDown.bind(this));
-        this._canvas.addEventListener('mouseup', this.onPointerUp.bind(this));
-        this._canvas.addEventListener('mousemove', this.onPointerMove.bind(this));
+        this._canvas.addEventListener('pointerdown', this.onPointerDown.bind(this));
+        this._canvas.addEventListener('pointerup', this.onPointerUp.bind(this));
+        this._canvas.addEventListener('pointercancel', this.onPointerUp.bind(this));
+        this._canvas.addEventListener('pointerleave', this.onPointerUp.bind(this));
+        this._canvas.addEventListener('pointerout', this.onPointerUp.bind(this));
+        this._canvas.addEventListener('pointermove', this.onPointerMove.bind(this));
         this._canvas.addEventListener( 'wheel', (e) => this.scrollHandler(e, e.deltaY*this.SCROLL_SENSITIVITY, 0.1));
-        // this.addEventListener( 'touchstart', this.pointerDownHandler);
+        this._canvas.addEventListener('touchstart', this.touchstartHandler.bind(this));
+        this._canvas.addEventListener('touchmove', this.touchmoveHandler.bind(this));
+        this._canvas.addEventListener('touchcancel', this.touchcancelHandler.bind(this));
+        this._canvas.addEventListener('touchend', this.touchendHandler.bind(this));
 
         this.worker = new Worker(workerScript);
         this.lastTimeUpdate = Date.now();
@@ -87,7 +97,7 @@ export class CustomCanvasWebkit extends HTMLElement {
             let deltaTime = nowTime - this.lastTimeUpdate;
             this.lastTimeUpdate = nowTime; 
             this.simWorld.step(deltaTime / 1000);
-            // console.log("received message from web worker");
+            console.log("test worker");
         }
 
         document.addEventListener("visibilitychange", this.tabSwitchingHandler);
@@ -123,8 +133,31 @@ export class CustomCanvasWebkit extends HTMLElement {
         this.attachShadow({mode: "open"});
     }
 
+    attributeChangedCallback(name, oldValue, newValue) {
+        console.log(`Attribute ${name} has changed.`);
+        if (name == "width"){
+            this.width = +newValue;
+            console.log("width", this.width);
+        }
+        if (name == "height"){
+            this.height = +newValue;
+            console.log("height", this.height);
+        }
+        if (name == "full-screen"){
+            console.log("full-screen", newValue);
+            if (newValue !== null && newValue !== "false"){
+                this.width = window.innerWidth;
+                this.height = window.innerHeight;
+            }
+        }
+        if (name == "style"){
+            this._canvas.setAttribute(name, newValue);
+            this._canvas.style.background = "gray";
+        }
+
+    }
+
     connectedCallback(){
-        console.log("event location function", this.getEventLocation);
         this.shadowRoot.appendChild(this._canvas);
         this.requestRef = requestAnimationFrame(this.step);
     }
@@ -154,11 +187,9 @@ export class CustomCanvasWebkit extends HTMLElement {
         deltaTime /= 1000;
         this.prevTime = timestamp;
 
-        // setting width and height of the canvas resets the contents in the canvas
-        // this.width = this.width;
-        // this.height = this.height;
-        this._canvas.width = window.innerWidth;
-        this._canvas.height = window.innerHeight;
+        this._canvas.width = this.width;
+        this._canvas.height = this.height;
+        this.topLeftCorner = {x: this._canvas.getBoundingClientRect().x, y: this._canvas.getBoundingClientRect().y};
 
         this.context.restore();
         this.context.translate( this.width / 2, this.height / 2 );
@@ -280,6 +311,7 @@ export class CustomCanvasWebkit extends HTMLElement {
 
     getEventLocation(e: UIEvent): point {
         if (window.TouchEvent !== undefined && e instanceof TouchEvent && e.touches.length == 1) {
+            console.log("touch event");
             return { x:e.touches[0].clientX, y: e.touches[0].clientY };
         }
         if (e instanceof MouseEvent){
@@ -306,72 +338,74 @@ export class CustomCanvasWebkit extends HTMLElement {
         return PointCal.subVector(PointCal.transform2NewAxis(translateScalePoint, this.cameraAngle), offset);
     }
 
-    onPointerUp(e: MouseEvent) {
-        if (e.button == 0) {
-            this.isDragging = false;
-            this.lastZoom = this.cameraZoom;
-            let convertCoord = this.getEventLocation(e);
-        }
-        let element = e.target as HTMLCanvasElement;
-        element.style.cursor = "auto";
-    }
-
-    onPointerDown(e: MouseEvent) {
-        console.log("mouse pos in view", this.getEventLocation(e));
-        let convertedCoord = this.getWorldPos(this.getEventLocation(e));
-        console.log("mouse pos in world space ", this.convertCoord(convertedCoord));
-        console.log("simworld", this.simWorld);
-        this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
-            let vBody = body as VisualRigidBody;
-            console.log("vbody", vBody);
-            if(vBody.raycast(this.convertCoord(convertedCoord))){
-                console.log("clicked in body with ident: ", ident);
-                console.log("clicked body", vBody);
-                console.log("current body width in px on screen:", this.cameraZoom * vBody.getLargestDimension());
-                let targetDimension = 0.05 * this.width;
-                console.log("target zoom level would be:", targetDimension / vBody.getLargestDimension());
-                this.cameraLockedOnPoint = this.convert2CameraCoord(this.convertCoord(vBody.getCenter()));
-                this.cameraLockedOnObj = vBody;
-                console.log("Camera Locked on Point", this.cameraLockedOnPoint);
-                this.setCameraZoom(targetDimension / vBody.getLargestDimension());
-                this.focusCameraOnObj(vBody);
-                this.alignCameraWithObjOrientation(vBody);
+    onPointerUp(e: PointerEvent) {
+        if(e.pointerType === "mouse"){
+            if (e.button == 0) {
+                this.isDragging = false;
+                // this.lastZoom = this.cameraZoom;
             }
-        })
+            let element = e.target as HTMLCanvasElement;
+            element.style.cursor = "auto";
+        } 
+    }
 
-        if (e.button == 0 && e.metaKey) {
-            this.isDragging = true;
-            this.dragStart = this.getWorldPos(this.getEventLocation(e));
-            this.dragOffset = {...this.cameraOffset};
-            this.cameraPanningPercentage = null;
-        } else if (e.button == 0) {
-            let leftClickX = this.getEventLocation(e).x/this.cameraZoom - this.cameraOffset.x - (window.innerWidth / 2 / this.cameraZoom);
-            let leftClickY = this.getEventLocation(e).y/this.cameraZoom - this.cameraOffset.y - (window.innerHeight / 2 / this.cameraZoom);
+    onPointerDown(e: PointerEvent) {
+        if(e.pointerType === "mouse"){
+            console.log("mouse pos in view", this.getEventLocation(e));
+            let convertedCoord = this.getWorldPos(this.getEventLocation(e));
+            console.log("mouse pos in world space ", this.convertCoord(convertedCoord));
+            this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
+                let vBody = body as VisualRigidBody;
+                if(vBody.raycast(this.convertCoord(convertedCoord))){
+                    console.log("clicked in body with ident: ", ident);
+                    console.log("clicked body", vBody);
+                    console.log("current body width in px on screen:", this.cameraZoom * vBody.getLargestDimension());
+                    let targetDimension = 0.05 * this.width;
+                    console.log("target zoom level would be:", targetDimension / vBody.getLargestDimension());
+                    this.cameraLockedOnPoint = this.convert2CameraCoord(this.convertCoord(vBody.getCenter()));
+                    this.cameraLockedOnObj = vBody;
+                    console.log("Camera Locked on Point", this.cameraLockedOnPoint);
+                    this.setCameraZoom(targetDimension / vBody.getLargestDimension());
+                    this.focusCameraOnObj(vBody);
+                    this.alignCameraWithObjOrientation(vBody);
+                }
+            });
+
+            if (e.button == 0 && e.metaKey) {
+                this.isDragging = true;
+                this.dragStart = this.getWorldPos(this.getEventLocation(e));
+                this.dragOffset = {...this.cameraOffset};
+                this.cameraPanningPercentage = null;
+            } else if (e.button == 0) {
+                let leftClickX = this.getEventLocation(e).x/this.cameraZoom - this.cameraOffset.x - (window.innerWidth / 2 / this.cameraZoom);
+                let leftClickY = this.getEventLocation(e).y/this.cameraZoom - this.cameraOffset.y - (window.innerHeight / 2 / this.cameraZoom);
+            }
         }
     }
 
 
-    onPointerMove(e:MouseEvent) {
-        let convertCoord = this.getEventLocation(e);
-        if (convertCoord == null){
-            console.log("test");
-            return;
-        }
-        if (this.isDragging) {
-            // console.log("Dragging camera");
-            // dragging cmaera
-            let canvas = e.target as HTMLCanvasElement;
-            canvas.style.cursor = "move";
-            console.log("mouse in frame pos", this.getWorldPos(convertCoord));
-            let diff = PointCal.subVector(this.getWorldPosWithOffset(convertCoord, this.dragOffset), this.dragStart);
-            this.cameraOffset = PointCal.addVector(this.dragOffset, diff);
+    onPointerMove(e: PointerEvent) {
+        e.preventDefault();
+        if(e.pointerType === "mouse"){
+            let convertCoord = this.getEventLocation(e);
+            if (convertCoord == null){
+                return;
+            }
+            if (this.isDragging) {
+                // console.log("Dragging camera");
+                // dragging cmaera
+                let canvas = e.target as HTMLCanvasElement;
+                canvas.style.cursor = "move";
+                console.log("mouse in frame pos", this.getWorldPos(convertCoord));
+                let diff = PointCal.subVector(this.getWorldPosWithOffset(convertCoord, this.dragOffset), this.dragStart);
+                this.cameraOffset = PointCal.addVector(this.dragOffset, diff);
 
-            this.limitCameraOffset();
+                this.limitCameraOffset();
+            }
         }
     }
 
     scrollHandler(e: WheelEvent, zoomAmount: number, zoomFactor: number) {
-
         e.preventDefault();
         // console.log("deltaY: ", e.deltaY);
         // console.log("result:", Math.abs(e.deltaY) % 8 == 0 && Math.abs(e.deltaY) !== 0 );
@@ -387,13 +421,12 @@ export class CustomCanvasWebkit extends HTMLElement {
             this.cameraZoomingPercentage = null;
             let originalWorldPos = this.getWorldPos(this.getEventLocation(e));
             if (this.cameraLockedOnObj !== null){
-                originalWorldPos = this.convert2CameraCoord(this.convertCoord(this.cameraLockedOnObj.getCenter()));
+                originalWorldPos = this.convertCoord(this.cameraLockedOnObj.getCenter());
             }
             if (!this.isDragging) {
                 if (zoomAmount) {
                     this.cameraZoom -= zoomAmount * 5;
                 } else if (zoomFactor) {
-                    // console.log(zoomFactor)
                     this.cameraZoom = zoomFactor * this.lastZoom;
                 }
                 
@@ -402,8 +435,7 @@ export class CustomCanvasWebkit extends HTMLElement {
                 // console.log("Diff in World Coordinate after zooming: ", PointCal.subVector(originalWorldPos, this.getWorldPos(this.getEventLocation(e))));
                 let posDiff = PointCal.subVector(originalWorldPos, this.getWorldPos(this.getEventLocation(e)));
                 if (this.cameraLockedOnObj !== null){
-                    posDiff = PointCal.subVector(originalWorldPos, this.convert2CameraCoord(this.convertCoord(this.cameraLockedOnObj.getCenter())));
-                    console.log("pos Diff", posDiff);
+                    posDiff = PointCal.subVector(originalWorldPos, this.convertCoord(this.cameraLockedOnObj.getCenter()));
                 }
                 
                 if (originalWorldPos.x >= 0 && originalWorldPos.x <= this.maxTransWidth || originalWorldPos.x < 0 && originalWorldPos.x >= -this.maxTransWidth) {
@@ -415,11 +447,6 @@ export class CustomCanvasWebkit extends HTMLElement {
             }
             
         } 
-        // console.log("wheelDeltaY:", e.wheelDeltaY, "deltaY:", e.deltaY); 
-        // var isTouchPad = e.wheelDeltaY ? e.wheelDeltaY === -3 * e.deltaY : e.deltaMode === 0
-        // your code
-        // console.log("From" + isTouchPad? "touchpad" : "mouse");
-        // console.log("absolute: ", Math.abs(e.deltaY));
         else{ //(Math.abs(e.deltaY) % 40 !== 0 || Math.abs(e.deltaY) == 0) {
             // when the scroll is actually a pan movement
             //NOTE Panning
@@ -429,7 +456,7 @@ export class CustomCanvasWebkit extends HTMLElement {
             }
             // console.log("This is the world coordinate when panning:", this.getWorldPos(this.getEventLocation(e)));
             let diff = PointCal.rotatePoint({x: e.deltaX, y: e.deltaY}, -this.cameraAngle);
-            this.cameraOffset.x -= 0.5 * (diff.x/ this.cameraZoom);
+            this.cameraOffset.x -= 0.5 * (diff.x / this.cameraZoom);
             this.cameraOffset.y -= 0.5 * (diff.y / this.cameraZoom);
 
             // clipping camera panning
@@ -444,7 +471,7 @@ export class CustomCanvasWebkit extends HTMLElement {
                 this.cameraOffset.y = Math.min(this.maxTransHeight, this.cameraOffset.y);
             }
         } 
-        console.log("Current Top left Corner:", this.getWorldPos({x: 0, y: 0}));
+        // console.log("Current Top left Corner:", this.getWorldPos({x: 0, y: 0}));
     }
 
     private limitCameraOffset(){
@@ -666,8 +693,108 @@ export class CustomCanvasWebkit extends HTMLElement {
         }
     }
 
-    pointerDownHandler(event){
-        console.log("test");
+    touchstartHandler(e: TouchEvent){
+        if(e.targetTouches.length === 2){
+            this.isDragging = false;
+            let firstTouchPoint = {x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY};
+            let secondTouchPoint = {x: e.targetTouches[1].clientX, y: e.targetTouches[1].clientY};
+            this.startTouchPointDistance = PointCal.distanceBetweenPoints(firstTouchPoint, secondTouchPoint);
+            this.startTouchPoints = [firstTouchPoint, secondTouchPoint];
+            console.log("distance at the beginning of touch gesture", this.startTouchPointDistance);
+            let midPoint = PointCal.linearInterpolation(firstTouchPoint, secondTouchPoint, 0.5);
+            console.log("mid point of two touch point is", midPoint);
+        } else if (e.targetTouches.length === 1){
+            this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
+                let vBody = body as VisualRigidBody;
+                if(vBody.raycast(this.convertCoord(this.getWorldPos({x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY})))){
+                    console.log("clicked in body with ident: ", ident);
+                    console.log("clicked body", vBody);
+                    console.log("current body width in px on screen:", this.cameraZoom * vBody.getLargestDimension());
+                    let targetDimension = 0.05 * this.width;
+                    console.log("target zoom level would be:", targetDimension / vBody.getLargestDimension());
+                    this.cameraLockedOnPoint = this.convert2CameraCoord(this.convertCoord(vBody.getCenter()));
+                    this.cameraLockedOnObj = vBody;
+                    console.log("Camera Locked on Point", this.cameraLockedOnPoint);
+                    this.setCameraZoom(targetDimension / vBody.getLargestDimension());
+                    this.focusCameraOnObj(vBody);
+                    this.alignCameraWithObjOrientation(vBody);
+                }
+            })
+            this.isDragging = true;
+            this.startTouchPoints = [{x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY}];
+        }
+    }
+
+    touchcancelHandler(e: TouchEvent){
+        this.startTouchPoints = [];
+        this.isDragging = false;
+    }
+
+    touchendHandler(e: TouchEvent){
+        this.startTouchPoints = [];
+        this.isDragging = false;
+    }
+
+    touchmoveHandler(e:TouchEvent){
+        e.preventDefault();
+        if(e.targetTouches.length == 2){
+            //NOTE Touch Zooming
+            // pinch movement
+            // console.log("Pinch Zooming");
+            let startPoint = {x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY};
+            let endPoint = {x: e.targetTouches[1].clientX, y: e.targetTouches[1].clientY};
+            let touchPointDist = PointCal.distanceBetweenPoints(startPoint, endPoint);
+            let distDiff = this.startTouchPointDistance - touchPointDist;
+            let midPoint = PointCal.linearInterpolation(startPoint, endPoint, 0.5);
+            // console.log("mid point of two touch point is", this.convertCoord(this.getWorldPos(midPoint)));
+            this.cameraZoomingPercentage = null;
+            let originalWorldPos = this.getWorldPos(midPoint);
+            if (this.cameraLockedOnObj !== null){
+                originalWorldPos = this.convertCoord(this.cameraLockedOnObj.getCenter());
+            }
+            if (!this.isDragging) {
+                let zoomAmount = distDiff * 0.3 * this.cameraZoom * this.cameraZoomFactor * this.SCROLL_SENSITIVITY;
+                this.cameraZoom -= zoomAmount * 1;
+                
+                this.cameraZoom = Math.min( this.cameraZoom, this.MAX_ZOOM );
+                this.cameraZoom = Math.max( this.cameraZoom, this.MIN_ZOOM );
+                // console.log("Diff in World Coordinate after zooming: ", PointCal.subVector(originalWorldPos, this.getWorldPos(this.getEventLocation(e))));
+                let posDiff = PointCal.subVector(originalWorldPos, this.getWorldPos(midPoint));
+                if (this.cameraLockedOnObj !== null){
+                    posDiff = PointCal.subVector(originalWorldPos, this.convertCoord(this.cameraLockedOnObj.getCenter()));
+                }
+                
+                if (originalWorldPos.x >= 0 && originalWorldPos.x <= this.maxTransWidth || originalWorldPos.x < 0 && originalWorldPos.x >= -this.maxTransWidth) {
+                    this.cameraOffset.x -= posDiff.x;
+                }
+                if (originalWorldPos.y >= 0 && originalWorldPos.y <= this.maxTransHeight || originalWorldPos.y < 0 && originalWorldPos.y >= -this.maxTransHeight) {
+                    this.cameraOffset.y -= posDiff.y;
+                }
+            }
+
+            
+        } else if (e.targetTouches.length == 1 && this.isDragging){
+            //NOTE Touch panning
+            this.cameraPanningPercentage = null;
+            if (this.cameraLockedOnObj !== null){
+                return;
+            }
+            // console.log("Panning");
+            let delta = PointCal.rotatePoint(PointCal.subVector(this.startTouchPoints[0], {x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY}), -this.cameraAngle);
+            this.cameraOffset.x -= 0.5 * (delta.x / this.cameraZoom);
+            this.cameraOffset.y -= 0.5 * (delta.y / this.cameraZoom);
+            this.startTouchPoints = [{x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY}];
+            // clipping camera panning
+            if (this.cameraOffset.x < 0){
+                this.cameraOffset.x = this.maxTransWidth <= -this.cameraOffset.x ? -this.maxTransWidth : this.cameraOffset.x;
+            } else {
+                this.cameraOffset.x = Math.min(this.maxTransWidth, this.cameraOffset.x);
+            }
+            if (this.cameraOffset.y < 0){
+                this.cameraOffset.y = this.maxTransHeight <= -this.cameraOffset.y ? -this.maxTransHeight : this.cameraOffset.y;
+            } else {
+                this.cameraOffset.y = Math.min(this.maxTransHeight, this.cameraOffset.y);
+            }
+        }
     }
 }
-
