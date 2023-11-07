@@ -45,6 +45,10 @@ export class CustomCanvasWebkit extends HTMLElement {
     private cameraTransitionEasingFn: (x: number)=>number;
     private maxTransWidth: number;
     private maxTransHeight: number;
+    private viewTopLeftInWorld: point;
+    private viewTopRightInWorld: point;
+    private viewBottomLeftInWorld: point;
+    private viewBottomRightInWorld: point;
 
     private uiList: Map<string, UIComponent>;
     private nonInteractiveUILists: NonInteractiveUIComponent[];
@@ -54,6 +58,7 @@ export class CustomCanvasWebkit extends HTMLElement {
     private keyController: Map<string, boolean>;
     private tempForce: number = 300;
     private worker: Worker;
+    private testWorker: Worker;
 
     private topLeftCorner: point;
     static observedAttributes = ["width", "height", "full-screen", "style"];
@@ -91,12 +96,14 @@ export class CustomCanvasWebkit extends HTMLElement {
         this._canvas.addEventListener('touchend', this.touchendHandler.bind(this));
 
         this.worker = new Worker(workerScript);
+        this.testWorker = new Worker("./physicsWorker.js");
+        this.testWorker.postMessage({data: "test data"});
         this.lastTimeUpdate = Date.now();
         this.worker.onmessage = (data)=>{
             let nowTime = Date.now();
             let deltaTime = nowTime - this.lastTimeUpdate;
             this.lastTimeUpdate = nowTime; 
-            this.simWorld.step(deltaTime / 1000);
+            // this.simWorld.step(deltaTime / 1000);
             console.log("test worker");
         }
 
@@ -243,12 +250,24 @@ export class CustomCanvasWebkit extends HTMLElement {
         this.nonInteractiveUILists.forEach((nuiComp)=>{
             nuiComp.draw(this.context, this.cameraZoom);
         });
+        this.viewTopLeftInWorld = this.convertCoord(this.getWorldPos({x: this._canvas.getBoundingClientRect().x, y: this._canvas.getBoundingClientRect().y}));
+        this.viewTopRightInWorld = this.convertCoord(this.getWorldPos({x: this._canvas.getBoundingClientRect().x + this.width, y: this._canvas.getBoundingClientRect().y}));
+        this.viewBottomLeftInWorld = this.convertCoord(this.getWorldPos({x: this._canvas.getBoundingClientRect().x, y: this._canvas.getBoundingClientRect().y + this.height}));
+        this.viewBottomRightInWorld = this.convertCoord(this.getWorldPos({x: this._canvas.getBoundingClientRect().x + this.width, y: this._canvas.getBoundingClientRect().y + this.height}));
 
+
+        let minX = Math.min(this.viewTopLeftInWorld.x, this.viewTopRightInWorld.x, this.viewBottomLeftInWorld.x, this.viewBottomRightInWorld.x);
+        let maxX = Math.max(this.viewTopLeftInWorld.x, this.viewTopRightInWorld.x, this.viewBottomLeftInWorld.x, this.viewBottomRightInWorld.x);
+        let minY = Math.min(this.viewTopLeftInWorld.y, this.viewTopRightInWorld.y, this.viewBottomLeftInWorld.y, this.viewBottomRightInWorld.y);
+        let maxY = Math.max(this.viewTopLeftInWorld.y, this.viewTopRightInWorld.y, this.viewBottomLeftInWorld.y, this.viewBottomRightInWorld.y);
         // step and draw elements
-        //this.simWorld.step(deltaTime);
+        // this.simWorld.step(deltaTime);
         this.simWorld.getRigidBodyList().forEach((body, index)=> {
             let vBody = body as VisualRigidBody;
-            vBody.draw(this.context, this.cameraZoom);
+            const centerPoint = vBody.getCenter();
+            if (centerPoint.x <= maxX && centerPoint.x >= minX && centerPoint.y <= maxY && centerPoint.y >= minY){
+                vBody.draw(this.context, this.cameraZoom);
+            }
         });
 
         if (this.cameraLockedOnObj !== null){
@@ -355,6 +374,11 @@ export class CustomCanvasWebkit extends HTMLElement {
 
     onPointerDown(e: PointerEvent) {
         if(e.pointerType === "mouse"){
+            console.log("Top Left", this.viewTopLeftInWorld);
+            console.log("Top Right", this.viewTopRightInWorld);
+            console.log("Bottom Left", this.viewBottomLeftInWorld);
+            console.log("Bottom Right", this.viewBottomRightInWorld);
+
             console.log("mouse pos in view", this.getEventLocation(e));
             let convertedCoord = this.getWorldPos(this.getEventLocation(e));
             console.log("mouse pos in world space ", this.convertCoord(convertedCoord));
@@ -537,12 +561,9 @@ export class CustomCanvasWebkit extends HTMLElement {
             console.log("target camera position if outside of map");
             return;
         }
-        console.log("camera angle ", this.cameraAngle * 180 / Math.PI);
-        console.log("obj angle", this.normalizeAngle(body.getOrientationAngle()) * 180 / Math.PI);
+        this.cameraAngle = this.normalizeAngle(this.cameraAngle);
         let targetAngle = this.normalizeAngle(body.getOrientationAngle()) - (90 * Math.PI / 180);
-        console.log("target angle", targetAngle * 180 / Math.PI);
-        let diff = Math.abs(targetAngle - this.cameraAngle) > Math.PI ? this.cameraAngle - targetAngle : targetAngle - this.cameraAngle;
-        console.log("angle diff:", diff * 180 / Math.PI);
+        let diff = this.getMinimumAngle(targetAngle - this.cameraAngle);
         this.cameraRotatingPercentage = 0;
         this.cameraAngleOrigin = this.cameraAngle;
         this.cameraAngleTargetSpan = diff;
@@ -550,8 +571,8 @@ export class CustomCanvasWebkit extends HTMLElement {
 
     alignCameraWithAngle(angle: number){
         let targetAngle = angle;
-        let diff = Math.abs(targetAngle - this.cameraAngle) > Math.PI ? this.cameraAngle - targetAngle : targetAngle - this.cameraAngle;
-        console.log("angle diff:", diff);
+        this.cameraAngle = this.normalizeAngle(this.cameraAngle);
+        let diff = this.getMinimumAngle(targetAngle - this.cameraAngle);
         this.cameraRotatingPercentage = 0;
         this.cameraAngleOrigin = this.cameraAngle;
         this.cameraAngleTargetSpan = diff;
@@ -693,10 +714,10 @@ export class CustomCanvasWebkit extends HTMLElement {
         if (document.hidden){
             console.log("Browser tab is hidden");
             this.lastTimeUpdate = Date.now();
-            this.worker.postMessage({turn: "on"});
+            this.worker.postMessage({turn: "on", testPoint: {x: 100, y: 100}});
         } else {
             console.log("Browser tab is visible");
-            this.worker.postMessage({turn: "off"});
+            this.worker.postMessage({turn: "off", testPoint: {x: 100, y: 100}});
         }
     }
 
@@ -807,8 +828,6 @@ export class CustomCanvasWebkit extends HTMLElement {
 
     normalizeAngle(angle: number){
         angle = angle % (2 * Math.PI)
-
-    
         if (angle > Math.PI){
             angle -= (2 * Math.PI)
         } else if (angle < -Math.PI){
@@ -820,5 +839,15 @@ export class CustomCanvasWebkit extends HTMLElement {
         }
 
         return angle
+    }
+
+    getMinimumAngle(angle: number){
+        angle = angle % (2 * Math.PI)
+        if (angle > Math.PI){
+            angle -= (2 * Math.PI)
+        } else if (angle < -Math.PI){
+            angle += (2 * Math.PI)
+        }
+        return angle;
     }
 }
