@@ -133,6 +133,10 @@ export class CustomCanvasWebkit extends HTMLElement {
         this.attachShadow({mode: "open"});
     }
 
+    getBoundaries(){
+        return {minX: -this.maxTransWidth, maxX: this.maxTransWidth, minY: -this.maxTransHeight, maxY: this.maxTransHeight};
+    }
+
     attributeChangedCallback(name, oldValue, newValue) {
         console.log(`Attribute ${name} has changed.`);
         if (name == "width"){
@@ -241,7 +245,7 @@ export class CustomCanvasWebkit extends HTMLElement {
         });
 
         // step and draw elements
-        this.simWorld.step(deltaTime);
+        //this.simWorld.step(deltaTime);
         this.simWorld.getRigidBodyList().forEach((body, index)=> {
             let vBody = body as VisualRigidBody;
             vBody.draw(this.context, this.cameraZoom);
@@ -533,9 +537,12 @@ export class CustomCanvasWebkit extends HTMLElement {
             console.log("target camera position if outside of map");
             return;
         }
-        let targetAngle = body.getOrientationAngle() - (90 * Math.PI / 180);
+        console.log("camera angle ", this.cameraAngle * 180 / Math.PI);
+        console.log("obj angle", this.normalizeAngle(body.getOrientationAngle()) * 180 / Math.PI);
+        let targetAngle = this.normalizeAngle(body.getOrientationAngle()) - (90 * Math.PI / 180);
+        console.log("target angle", targetAngle * 180 / Math.PI);
         let diff = Math.abs(targetAngle - this.cameraAngle) > Math.PI ? this.cameraAngle - targetAngle : targetAngle - this.cameraAngle;
-        console.log("angle diff:", diff);
+        console.log("angle diff:", diff * 180 / Math.PI);
         this.cameraRotatingPercentage = 0;
         this.cameraAngleOrigin = this.cameraAngle;
         this.cameraAngleTargetSpan = diff;
@@ -700,9 +707,9 @@ export class CustomCanvasWebkit extends HTMLElement {
             let secondTouchPoint = {x: e.targetTouches[1].clientX, y: e.targetTouches[1].clientY};
             this.startTouchPointDistance = PointCal.distanceBetweenPoints(firstTouchPoint, secondTouchPoint);
             this.startTouchPoints = [firstTouchPoint, secondTouchPoint];
-            console.log("distance at the beginning of touch gesture", this.startTouchPointDistance);
+            // console.log("distance at the beginning of touch gesture", this.startTouchPointDistance);
             let midPoint = PointCal.linearInterpolation(firstTouchPoint, secondTouchPoint, 0.5);
-            console.log("mid point of two touch point is", midPoint);
+            // console.log("mid point of two touch point is", midPoint);
         } else if (e.targetTouches.length === 1){
             this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
                 let vBody = body as VisualRigidBody;
@@ -796,5 +803,22 @@ export class CustomCanvasWebkit extends HTMLElement {
                 this.cameraOffset.y = Math.min(this.maxTransHeight, this.cameraOffset.y);
             }
         }
+    }
+
+    normalizeAngle(angle: number){
+        angle = angle % (2 * Math.PI)
+
+    
+        if (angle > Math.PI){
+            angle -= (2 * Math.PI)
+        } else if (angle < -Math.PI){
+            angle += (2 * Math.PI)
+        }
+
+        if (angle < 0){
+            angle += (Math.PI * 2);
+        }
+
+        return angle
     }
 }
