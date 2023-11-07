@@ -1,7 +1,8 @@
 const workercode = () => {
     let timerInterval;
     let time = 0;
-    self.onmessage = function ({ data: { turn } }) {
+    self.onmessage = function ({ data: { turn, testPoint } }) {
+      console.log("from Worker thread testPoint is", testPoint);
       if (turn === "off" || timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
@@ -14,7 +15,7 @@ const workercode = () => {
         }, 16.666);
       }
     };
-  };
+};
   
   let code = workercode.toString();
   code = code.substring(code.indexOf("{") + 1, code.lastIndexOf("}"));
