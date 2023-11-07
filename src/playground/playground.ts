@@ -62,23 +62,35 @@ class NILine implements NonInteractiveUIComponent {
 
 customElements.define('custom-canvas', CustomCanvas, {extends: "canvas"});
 customElements.define('wheel-dial', Dial);
-customElements.define('canvas-webkit', CustomCanvasWebkit);
-window.onload = ()=>{
-    let element = document.getElementById("test-graph") as CustomCanvasWebkit;
+customElements.define('canvas-webkit', CustomCanvasWebkit)
+let element = document.getElementById("test-graph") as CustomCanvasWebkit;
 
-    let testTrack = new Track({x: 0, y: 0}, {x: 100, y: 200}, {x: 300, y: 400}, {x: 500, y: 600});
+let testTrack = new Track({x: 0, y: 0}, {x: 100, y: 200}, {x: 300, y: 400}, {x: 500, y: 600});
 
-    let testPolygon = new VisualPolygon({x: 300, y: 300}, [{x: 10, y: 10}, {x: 10, y: -10}, {x: -10, y: -10}, {x: -10, y: 10}], 0, 50, false, true);
-    let testStaticPolygon = new VisualPolygon({x: 50, y: 0}, [{x: 5, y: 5}, {x: 5, y: -5}, {x: -5, y: -5}, {x: -5, y: 5}], 115 *  Math.PI / 180, 50, false, true);
+let testPolygon = new VisualPolygon({x: 300, y: 300}, [{x: 10, y: 10}, {x: 10, y: -10}, {x: -10, y: -10}, {x: -10, y: 10}], 0, 50, false, true);
+let testStaticPolygon = new VisualPolygon({x: 50, y: 0}, [{x: 5, y: 5}, {x: 5, y: -5}, {x: -5, y: -5}, {x: -5, y: 5}], 115 *  Math.PI / 180, 50, false, true);
 
-    element.addRigidBody(testPolygon);
-    element.addRigidBody(testStaticPolygon);
+element.addRigidBody(testPolygon);
+element.addRigidBody(testStaticPolygon);
+element.addRigidBody(new VisualPolygon({x: 80, y: 0}, [{x: 10, y: 10}, {x: 10, y: -10}, {x: -10, y: -10}, {x: -10, y: 10}], -85 * Math.PI/180, 50, false, true))
 
-    element.insertNIUIComponent(testTrack);
+element.insertNIUIComponent(testTrack);
 
-    let button = document.querySelector("button");
-    if (button) {
-        button.onclick = (e) => element.resetCamera();
-    }
+let button = document.querySelector("button");
+if (button) {
+    button.onclick = (e) => element.resetCamera();
+}
+const boundaries = element.getBoundaries();
+for(let index = 0; index < 3000; index++){
+    let xCoord = getRandomInt(boundaries.minX, boundaries.maxX);
+    let yCoord = getRandomInt(boundaries.minY, boundaries.maxY);
+    let rotation = getRandomInt(-180, 180);
+    rotation = rotation * Math.PI / 180
+    element.addRigidBody(new VisualPolygon({x: xCoord, y: yCoord}, [{x: 10, y: 10}, {x: 10, y: -10}, {x: -10, y: -10}, {x: -10, y: 10}], rotation, 50, false, true))
+}
 
+function getRandomInt(min, max) {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
 }
