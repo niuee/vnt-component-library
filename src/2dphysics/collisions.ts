@@ -1,5 +1,6 @@
-import { BaseRigidBody } from "./rigidbody";
+import { BaseRigidBody, RigidBody } from "./rigidbody";
 import { PointCal, point } from "point2point";
+import { QuadTree } from "./world";
 
 export class Collision {
 
@@ -7,13 +8,13 @@ export class Collision {
 
     }
 
-    static broadPhase(bodies: BaseRigidBody[]): {bodyAIndex: number, bodyBIndex: number}[]{
+    static broadPhase(quadTree: QuadTree, bodies: BaseRigidBody[]): {bodyAIndex: number, bodyBIndex: number}[]{
         let possibleCombi: {bodyAIndex: number, bodyBIndex: number}[] = [];
-        
         for(let index = 0; index <= bodies.length - 1; index++){
-            for(let jindex = index + 1; jindex <= bodies.length - 1; jindex++){
+            let objsToCheck = quadTree.retrieve(bodies[index]);
+            for(let jindex = 0; jindex <= objsToCheck.length - 1; jindex++){
                 let bodyA = bodies[index];
-                let bodyB = bodies[jindex];
+                let bodyB = objsToCheck[jindex];
                 if (bodyA.isStatic() && bodyB.isStatic()){
                     continue;
                 }
@@ -21,6 +22,25 @@ export class Collision {
                     continue;
                 }
                 possibleCombi.push({bodyAIndex: index, bodyBIndex: jindex});
+            }
+        }
+        return possibleCombi
+    }
+
+    static broadPhaseWithRigidBodyReturned(quadTree: QuadTree, bodies: RigidBody[]): {bodyA: RigidBody, bodyB: RigidBody}[]{
+        let possibleCombi: {bodyA: RigidBody, bodyB: RigidBody}[] = [];
+        for(let index = 0; index <= bodies.length - 1; index++){
+            let objsToCheck = quadTree.retrieve(bodies[index]);
+            for(let jindex = 0; jindex <= objsToCheck.length - 1; jindex++){
+                let bodyA = bodies[index];
+                let bodyB = objsToCheck[jindex];
+                if (bodyA.isStatic() && bodyB.isStatic()){
+                    continue;
+                }
+                if(!this.aabbIntersects(bodyA.getAABB(), bodyB.getAABB())){
+                    continue;
+                }
+                possibleCombi.push({bodyA: bodyA, bodyB: bodyB});
             }
         }
         return possibleCombi
@@ -61,7 +81,42 @@ export class Collision {
         })
     }
 
-    static intersects(bodyA: BaseRigidBody, bodyB: BaseRigidBody): {collision: boolean, depth: number, normal: point}{
+    static narrowPhaseWithRigidBody(bodies: BaseRigidBody[], combinationsToCheck: {bodyA: RigidBody, bodyB: RigidBody}[], resolveCollision: boolean): void {
+        if (!resolveCollision) {
+            return;
+        }
+        combinationsToCheck.forEach(combination => {
+            let bodyA = combination.bodyA;
+            let bodyB = combination.bodyB;
+            let {collision, depth, normal: normalAxis} = this.intersects(bodyA, bodyB);
+            if (collision) {
+                // console.log("collision");
+                let moveDisplacement = PointCal.multiplyVectorByScalar(normalAxis, depth / 2);
+                let revMoveDisplacement = PointCal.multiplyVectorByScalar(normalAxis, -depth / 2);
+
+                if (!bodyA.isStatic()) {
+                    bodyA.move(moveDisplacement);
+                }
+                if (!bodyB.isStatic()) {
+                    bodyB.move(revMoveDisplacement);
+                }
+                if (bodyA.isStatic()) {
+                    // bodyA.move(revMoveDisplacement);
+                    bodyB.move(revMoveDisplacement);
+                }
+                if (bodyB.isStatic()) {
+                    bodyA.move(moveDisplacement);
+                    // bodyB.move(moveDisplacement);
+                }
+
+                if (resolveCollision) {
+                    this.resolveCollision(bodyA, bodyB, normalAxis);
+                }
+            }
+        })
+    }
+
+    static intersects(bodyA: RigidBody, bodyB: RigidBody): {collision: boolean, depth: number, normal: point}{
         let axis: point[] = [];
         let bodyAAxes = bodyA.getCollisionAxes(bodyB);
         let bodyBAxes = bodyB.getCollisionAxes(bodyA);
@@ -105,7 +160,7 @@ export class Collision {
         return false;
     }
 
-    static resolveCollision(bodyA: BaseRigidBody, bodyB: BaseRigidBody, normal: point): void {
+    static resolveCollision(bodyA: RigidBody, bodyB: RigidBody, normal: point): void {
         if (bodyA.isStatic() && bodyB.isStatic()) {
             return;
         }

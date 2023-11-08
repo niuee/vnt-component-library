@@ -58,7 +58,7 @@ export class CustomCanvasWebkit extends HTMLElement {
     private keyController: Map<string, boolean>;
     private tempForce: number = 300;
     private worker: Worker;
-    private testWorker: Worker;
+    private worldWorker: Worker;
 
     private topLeftCorner: point;
     static observedAttributes = ["width", "height", "full-screen", "style"];
@@ -96,8 +96,6 @@ export class CustomCanvasWebkit extends HTMLElement {
         this._canvas.addEventListener('touchend', this.touchendHandler.bind(this));
 
         this.worker = new Worker(workerScript);
-        this.testWorker = new Worker("./physicsWorker.js");
-        this.testWorker.postMessage({data: "test data"});
         this.lastTimeUpdate = Date.now();
         this.worker.onmessage = (data)=>{
             let nowTime = Date.now();
@@ -106,6 +104,7 @@ export class CustomCanvasWebkit extends HTMLElement {
             // this.simWorld.step(deltaTime / 1000);
             console.log("test worker");
         }
+
 
         document.addEventListener("visibilitychange", this.tabSwitchingHandler);
 
@@ -126,7 +125,7 @@ export class CustomCanvasWebkit extends HTMLElement {
         this.uiList = new Map<string, UIComponent>();
         this.nonInteractiveUILists = [];
         this.prevTime = 0;
-        this.simWorld = new World();
+        this.simWorld = new World(this.maxTransWidth, this.maxTransHeight);
         this.keyController = new Map<string, boolean>();
 
         this.keyController.set("KeyA", false);
@@ -138,6 +137,15 @@ export class CustomCanvasWebkit extends HTMLElement {
 
         this.cameraTransitionEasingFn = easeInOutSine;
         this.attachShadow({mode: "open"});
+    }
+
+    setWorldWorker(worldWorker: Worker){
+        this.worldWorker = worldWorker;
+        this.worldWorker.onmessage = this.workerMsgHandler.bind(this);
+    }
+
+    workerMsgHandler(event: MessageEvent){
+        console.log("Received message from world worker", event.data);
     }
 
     getBoundaries(){
@@ -250,6 +258,7 @@ export class CustomCanvasWebkit extends HTMLElement {
         this.nonInteractiveUILists.forEach((nuiComp)=>{
             nuiComp.draw(this.context, this.cameraZoom);
         });
+
         this.viewTopLeftInWorld = this.convertCoord(this.getWorldPos({x: this._canvas.getBoundingClientRect().x, y: this._canvas.getBoundingClientRect().y}));
         this.viewTopRightInWorld = this.convertCoord(this.getWorldPos({x: this._canvas.getBoundingClientRect().x + this.width, y: this._canvas.getBoundingClientRect().y}));
         this.viewBottomLeftInWorld = this.convertCoord(this.getWorldPos({x: this._canvas.getBoundingClientRect().x, y: this._canvas.getBoundingClientRect().y + this.height}));
@@ -260,6 +269,7 @@ export class CustomCanvasWebkit extends HTMLElement {
         let maxX = Math.max(this.viewTopLeftInWorld.x, this.viewTopRightInWorld.x, this.viewBottomLeftInWorld.x, this.viewBottomRightInWorld.x);
         let minY = Math.min(this.viewTopLeftInWorld.y, this.viewTopRightInWorld.y, this.viewBottomLeftInWorld.y, this.viewBottomRightInWorld.y);
         let maxY = Math.max(this.viewTopLeftInWorld.y, this.viewTopRightInWorld.y, this.viewBottomLeftInWorld.y, this.viewBottomRightInWorld.y);
+        this.worldWorker.postMessage(JSON.stringify({command: "setBounds", topLeft: this.viewTopLeftInWorld, topRight: this.viewTopRightInWorld, bottomLeft: this.viewBottomLeftInWorld, bottomRight: this.viewTopRightInWorld}));
         // step and draw elements
         // this.simWorld.step(deltaTime);
         this.simWorld.getRigidBodyList().forEach((body, index)=> {
@@ -648,8 +658,17 @@ export class CustomCanvasWebkit extends HTMLElement {
     }
 
     addRigidBody(rigidBody: VisualRigidBody): void{
-        this.simWorld.addRigidBody(this.idGen.toFixed(), rigidBody);
-        this.idGen++;
+        // this.worldWorker.postMessage({command: "addRigidBody", rigidBody: JSON.stringify(rigidBody), type: rigidBody.constructor.name});
+    }
+
+    addPolygon(type: "VisualPolygon" | "VisualCircle", center: point, vertices: point[], orientationAngle: number = 0, mass: number = 50, isStatic: boolean = true, frictionEnabled: boolean = true, lineWidth: number = 0.3){
+        if(this.worldWorker !== null){
+            const data = {center: center, vertices: vertices, orientationAngle: orientationAngle, mass: mass, isStatic: isStatic, frictionEnabled: frictionEnabled, lineWidth: lineWidth};
+            let test = JSON.stringify(data);
+            console.log(JSON.parse(test));
+
+            this.worldWorker.postMessage(JSON.stringify({command: "addRigidBody", type: type, center: center, vertices: vertices, orientationAngle: orientationAngle, mass: mass, isStatic: isStatic, frictionEnabled: frictionEnabled, lineWidth: lineWidth}));
+        }
     }
 
     moveForward(): void{

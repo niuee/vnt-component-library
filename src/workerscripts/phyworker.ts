@@ -1,8 +1,8 @@
 const workercode = () => {
     let timerInterval;
     let time = 0;
-    self.onmessage = function ({ data: { turn, testPoint } }) {
-      console.log("from Worker thread testPoint is", testPoint);
+    self.onmessage = function ({ data: { turn } }) {
+      console.log("from Worker thread testPoint is", turn);
       if (turn === "off" || timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;

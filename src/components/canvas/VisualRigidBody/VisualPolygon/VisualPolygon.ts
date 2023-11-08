@@ -81,5 +81,9 @@ export class VisualPolygon extends VisualRigidBody{
         return !outOfPolygon;
     }
 
+    getVertices(){
+        let body = this._rigidBody as Polygon;
+        return body.getVerticesAbsCoord();
+    }
 
 }

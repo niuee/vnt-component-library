@@ -3,11 +3,17 @@ import { PointCal, point } from "point2point";
 export interface RigidBody {
 
     step(deltaTime: number): void;
+    isStatic(): boolean;
+    isMovingStatic(): boolean;
     getMinMaxProjection(unitvector: point): {min: number, max: number};
     getCollisionAxes(relativeBody: RigidBody): point[];
     applyForce(force: point): void;
     applyForceInOrientation(force: point): void;
     getAABB(): {min: point, max: point};
+    getMass(): number;
+    getLinearVelocity(): point;
+    setLinearVelocity(linearVelocity: point): void;
+    move(delta: point): void;
 
 }
 

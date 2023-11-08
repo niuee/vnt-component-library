@@ -58,8 +58,13 @@ export class CustomCanvas extends HTMLCanvasElement {
 
     private idGen: number = 0;
 
+    private deltaTimeElement: HTMLElement;
+
     constructor(){
         super();
+
+        this.deltaTimeElement = document.getElementById("delta-time");
+
         this.tabSwitchingHandler = this.tabSwitchingHandler.bind(this);
         this.step = this.step.bind(this);
 
@@ -84,8 +89,8 @@ export class CustomCanvas extends HTMLCanvasElement {
             let nowTime = Date.now();
             let deltaTime = nowTime - this.lastTimeUpdate;
             this.lastTimeUpdate = nowTime; 
-            this.simWorld.step(deltaTime / 1000);
-            // console.log("received message from web worker");
+            // this.simWorld.step(deltaTime / 1000);
+            console.log("received message from web worker");
         }
 
         document.addEventListener("visibilitychange", this.tabSwitchingHandler);
@@ -107,7 +112,7 @@ export class CustomCanvas extends HTMLCanvasElement {
         this.uiList = new Map<string, UIComponent>();
         this.nonInteractiveUILists = [];
         this.prevTime = 0;
-        this.simWorld = new World();
+        this.simWorld = new World(this.maxTransWidth, this.maxTransHeight);
         this.keyController = new Map<string, boolean>();
 
         this.keyController.set("KeyA", false);
@@ -143,12 +148,17 @@ export class CustomCanvas extends HTMLCanvasElement {
         }
     }
 
+    getBoundaries(){
+        return {minX: -this.maxTransWidth, maxX: this.maxTransWidth, minY: -this.maxTransHeight, maxY: this.maxTransHeight};
+    }
+
     step(timestamp: number) {
         let deltaTime = timestamp - this.prevTime;
         deltaTime = Math.min(Date.now() - this.lastTimeUpdate, deltaTime);
         deltaTime /= 1000;
         this.prevTime = timestamp;
-
+        
+        this.deltaTimeElement.innerText = deltaTime.toFixed(9);
         // setting width and height of the canvas resets the contents in the canvas
         // this.width = this.width;
         // this.height = this.height;
