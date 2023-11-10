@@ -5,7 +5,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 module.exports = [
   {
     mode: "development",
-    entry: { index:'./src/playground/playground.ts', physicsWorker:'./src/workerscripts/physicsWorker.ts'},
+    entry: { index:'./src/playground/playground.ts', physicsWorker:'./src/workerscripts/physicsWorker.ts', playgroundWorker: './src/workerscripts/playgroundWorker.ts'},
     output: {
       filename: '[name].js',
       path: path.resolve(__dirname, 'devDist'),

@@ -1,11 +1,7 @@
-import { World } from "../../2dphysics";
 import { PointCal, point } from "point2point";
 import { VisualRigidBody } from "./VisualRigidBody";
-import { workerScript } from "../../workerscripts/phyworker";
 import { easeInOutQuint, easeInOutSine, linear } from "../../easeFunctions";
 import { UIComponent, NonInteractiveUIComponent } from "./canvas";
-
-
 
 export class CustomCanvasWebkit extends HTMLElement {
 
@@ -53,12 +49,9 @@ export class CustomCanvasWebkit extends HTMLElement {
     private uiList: Map<string, UIComponent>;
     private nonInteractiveUILists: NonInteractiveUIComponent[];
     private prevTime: number;
-    private simWorld: World;
     private lastTimeUpdate: number;
     private keyController: Map<string, boolean>;
-    private tempForce: number = 300;
-    private worker: Worker;
-    private worldWorker: Worker;
+    private worldWorker: Worker = null;
 
     private topLeftCorner: point;
     static observedAttributes = ["width", "height", "full-screen", "style"];
@@ -95,15 +88,9 @@ export class CustomCanvasWebkit extends HTMLElement {
         this._canvas.addEventListener('touchcancel', this.touchcancelHandler.bind(this));
         this._canvas.addEventListener('touchend', this.touchendHandler.bind(this));
 
-        this.worker = new Worker(workerScript);
+        
         this.lastTimeUpdate = Date.now();
-        this.worker.onmessage = (data)=>{
-            let nowTime = Date.now();
-            let deltaTime = nowTime - this.lastTimeUpdate;
-            this.lastTimeUpdate = nowTime; 
-            // this.simWorld.step(deltaTime / 1000);
-            console.log("test worker");
-        }
+        
 
 
         document.addEventListener("visibilitychange", this.tabSwitchingHandler);
@@ -125,7 +112,6 @@ export class CustomCanvasWebkit extends HTMLElement {
         this.uiList = new Map<string, UIComponent>();
         this.nonInteractiveUILists = [];
         this.prevTime = 0;
-        this.simWorld = new World(this.maxTransWidth, this.maxTransHeight);
         this.keyController = new Map<string, boolean>();
 
         this.keyController.set("KeyA", false);
@@ -227,30 +213,6 @@ export class CustomCanvasWebkit extends HTMLElement {
         this.context.stroke();
         this.context.lineWidth = 3;
 
-        if (this.keyController.get("KeyD")) {
-            this.moveRightward();
-        }
-
-        if (this.keyController.get("KeyW")) {
-            this.moveForward();
-        }
-
-        if (this.keyController.get("KeyS")) {
-            this.moveBackward();
-        }
-
-        if (this.keyController.get("KeyA")) {
-            this.moveLeftward();
-        }
-
-        if (this.keyController.get("KeyQ")){
-            this.rotateCCW();
-        }
-        
-        if (this.keyController.get("KeyE")){
-            this.rotateCW();
-        }
-
         this.uiList.forEach((uiComponent, ident)=>{
             uiComponent.draw(this.context, this.cameraZoom);
         });
@@ -264,21 +226,6 @@ export class CustomCanvasWebkit extends HTMLElement {
         this.viewBottomLeftInWorld = this.convertCoord(this.getWorldPos({x: this._canvas.getBoundingClientRect().x, y: this._canvas.getBoundingClientRect().y + this.height}));
         this.viewBottomRightInWorld = this.convertCoord(this.getWorldPos({x: this._canvas.getBoundingClientRect().x + this.width, y: this._canvas.getBoundingClientRect().y + this.height}));
 
-
-        let minX = Math.min(this.viewTopLeftInWorld.x, this.viewTopRightInWorld.x, this.viewBottomLeftInWorld.x, this.viewBottomRightInWorld.x);
-        let maxX = Math.max(this.viewTopLeftInWorld.x, this.viewTopRightInWorld.x, this.viewBottomLeftInWorld.x, this.viewBottomRightInWorld.x);
-        let minY = Math.min(this.viewTopLeftInWorld.y, this.viewTopRightInWorld.y, this.viewBottomLeftInWorld.y, this.viewBottomRightInWorld.y);
-        let maxY = Math.max(this.viewTopLeftInWorld.y, this.viewTopRightInWorld.y, this.viewBottomLeftInWorld.y, this.viewBottomRightInWorld.y);
-        this.worldWorker.postMessage(JSON.stringify({command: "setBounds", topLeft: this.viewTopLeftInWorld, topRight: this.viewTopRightInWorld, bottomLeft: this.viewBottomLeftInWorld, bottomRight: this.viewTopRightInWorld}));
-        // step and draw elements
-        // this.simWorld.step(deltaTime);
-        this.simWorld.getRigidBodyList().forEach((body, index)=> {
-            let vBody = body as VisualRigidBody;
-            const centerPoint = vBody.getCenter();
-            if (centerPoint.x <= maxX && centerPoint.x >= minX && centerPoint.y <= maxY && centerPoint.y >= minY){
-                vBody.draw(this.context, this.cameraZoom);
-            }
-        });
 
         if (this.cameraLockedOnObj !== null){
             this.focusCameraOnObjWithoutTransition(this.cameraLockedOnObj);
@@ -392,22 +339,7 @@ export class CustomCanvasWebkit extends HTMLElement {
             console.log("mouse pos in view", this.getEventLocation(e));
             let convertedCoord = this.getWorldPos(this.getEventLocation(e));
             console.log("mouse pos in world space ", this.convertCoord(convertedCoord));
-            this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
-                let vBody = body as VisualRigidBody;
-                if(vBody.raycast(this.convertCoord(convertedCoord))){
-                    console.log("clicked in body with ident: ", ident);
-                    console.log("clicked body", vBody);
-                    console.log("current body width in px on screen:", this.cameraZoom * vBody.getLargestDimension());
-                    let targetDimension = 0.05 * this.width;
-                    console.log("target zoom level would be:", targetDimension / vBody.getLargestDimension());
-                    this.cameraLockedOnPoint = this.convert2CameraCoord(this.convertCoord(vBody.getCenter()));
-                    this.cameraLockedOnObj = vBody;
-                    console.log("Camera Locked on Point", this.cameraLockedOnPoint);
-                    this.setCameraZoom(targetDimension / vBody.getLargestDimension());
-                    this.focusCameraOnObj(vBody);
-                    this.alignCameraWithObjOrientation(vBody);
-                }
-            });
+            
 
             if (e.button == 0 && e.metaKey) {
                 this.isDragging = true;
@@ -657,86 +589,23 @@ export class CustomCanvasWebkit extends HTMLElement {
         this.alignCameraWithAngle(0);
     }
 
-    addRigidBody(rigidBody: VisualRigidBody): void{
-        // this.worldWorker.postMessage({command: "addRigidBody", rigidBody: JSON.stringify(rigidBody), type: rigidBody.constructor.name});
-    }
 
     addPolygon(type: "VisualPolygon" | "VisualCircle", center: point, vertices: point[], orientationAngle: number = 0, mass: number = 50, isStatic: boolean = true, frictionEnabled: boolean = true, lineWidth: number = 0.3){
         if(this.worldWorker !== null){
             const data = {center: center, vertices: vertices, orientationAngle: orientationAngle, mass: mass, isStatic: isStatic, frictionEnabled: frictionEnabled, lineWidth: lineWidth};
             let test = JSON.stringify(data);
-            console.log(JSON.parse(test));
 
             this.worldWorker.postMessage(JSON.stringify({command: "addRigidBody", type: type, center: center, vertices: vertices, orientationAngle: orientationAngle, mass: mass, isStatic: isStatic, frictionEnabled: frictionEnabled, lineWidth: lineWidth}));
         }
-    }
-
-    moveForward(): void{
-        let bodies = this.simWorld.getRigidBodyList();
-        if (bodies.length === 0) {
-            return
-        }
-        let controlBody = bodies[0];
-        let force: point = {x: this.tempForce, y: 0};
-        controlBody.applyForceInOrientation(force);
-    }
-
-    moveBackward(): void{
-        let bodies = this.simWorld.getRigidBodyList();
-        if (bodies.length === 0) {
-            return
-        }
-        let controlBody = bodies[0];
-        let force: point = {x: -this.tempForce, y: 0};
-        controlBody.applyForceInOrientation(force);
-    }
-
-    moveLeftward(): void{
-        let bodies = this.simWorld.getRigidBodyList();
-        if (bodies.length === 0) {
-            return
-        }
-        let controlBody = bodies[0];
-        let force: point = {y: this.tempForce, x: 0};
-        controlBody.applyForceInOrientation(force);
-    }
-
-    moveRightward(): void{
-        let bodies = this.simWorld.getRigidBodyList();
-        if (bodies.length === 0) {
-            return
-        }
-        let controlBody = bodies[0];
-        let force: point = {y: -this.tempForce, x: 0};
-        controlBody.applyForceInOrientation(force);
-    }
-
-    rotateCCW(): void{
-        let bodies = this.simWorld.getRigidBodyList();
-        if (bodies.length === 0) {
-            return
-        }
-        let controlBody = bodies[0];
-        controlBody.setAngularVelocity(0.087);
-    }
-
-    rotateCW(): void{
-        let bodies = this.simWorld.getRigidBodyList();
-        if (bodies.length === 0) {
-            return
-        }
-        let controlBody = bodies[0];
-        controlBody.setAngularVelocity(-0.087);
     }
 
     tabSwitchingHandler(){
         if (document.hidden){
             console.log("Browser tab is hidden");
             this.lastTimeUpdate = Date.now();
-            this.worker.postMessage({turn: "on", testPoint: {x: 100, y: 100}});
+            
         } else {
             console.log("Browser tab is visible");
-            this.worker.postMessage({turn: "off", testPoint: {x: 100, y: 100}});
         }
     }
 
@@ -751,22 +620,6 @@ export class CustomCanvasWebkit extends HTMLElement {
             let midPoint = PointCal.linearInterpolation(firstTouchPoint, secondTouchPoint, 0.5);
             // console.log("mid point of two touch point is", midPoint);
         } else if (e.targetTouches.length === 1){
-            this.simWorld.getRigidBodyMap().forEach((body, ident)=>{
-                let vBody = body as VisualRigidBody;
-                if(vBody.raycast(this.convertCoord(this.getWorldPos({x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY})))){
-                    console.log("clicked in body with ident: ", ident);
-                    console.log("clicked body", vBody);
-                    console.log("current body width in px on screen:", this.cameraZoom * vBody.getLargestDimension());
-                    let targetDimension = 0.05 * this.width;
-                    console.log("target zoom level would be:", targetDimension / vBody.getLargestDimension());
-                    this.cameraLockedOnPoint = this.convert2CameraCoord(this.convertCoord(vBody.getCenter()));
-                    this.cameraLockedOnObj = vBody;
-                    console.log("Camera Locked on Point", this.cameraLockedOnPoint);
-                    this.setCameraZoom(targetDimension / vBody.getLargestDimension());
-                    this.focusCameraOnObj(vBody);
-                    this.alignCameraWithObjOrientation(vBody);
-                }
-            })
             this.isDragging = true;
             this.startTouchPoints = [{x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY}];
         }

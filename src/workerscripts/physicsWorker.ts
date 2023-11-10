@@ -16,7 +16,7 @@ timerInterval = setInterval(() => {
     let now = Date.now();
     let deltaTime = Date.now() - time;
     time = now;
-    
+    console.log("delta time", deltaTime);
     offWorld.step(deltaTime / 1000);
     if(bounds.topLeft !== null && bounds.topRight !== null && bounds.bottomLeft !== null && bounds.bottomRight !== null){
         let minX = Math.min(bounds.topLeft.x, bounds.topRight.x, bounds.bottomLeft.x, bounds.bottomRight.x);
@@ -26,7 +26,7 @@ timerInterval = setInterval(() => {
     }
     let drawList = [];
     // postMessage({deltaTime: deltaTime});
-}, 16.666);
+}, 33);
 
 
 addEventListener('message', event => {
